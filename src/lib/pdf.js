@@ -5,11 +5,12 @@ import { inr2, dt } from './db'
 /**
  * Builds the supplier-facing PO.
  * po        : purchase_orders row (with supplier + entity joined)
- * items     : po_items rows (with shop joined)
+ * items     : po_items rows
+ * allocs    : po_item_allocations rows (with shops joined)
  * company   : settings.company value
  * returns   : { blob, filename }
  */
-export function buildPoPdf(po, items, company = {}) {
+export function buildPoPdf(po, items, allocs = [], company = {}) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const W = doc.internal.pageSize.getWidth()
   const M = 40
@@ -44,6 +45,7 @@ export function buildPoPdf(po, items, company = {}) {
   const right = [
     'Date: ' + dt(po.submitted_at || po.created_at),
     'Entity: ' + (po.entities?.name || ''),
+    'Type: ' + (po.purchase_type || '—'),
     'Expected delivery: ' + (po.expected_date ? dt(po.expected_date) : 'To confirm'),
     'Payment terms: ' + (sup.payment_terms || (sup.credit_days ? sup.credit_days + ' days' : '—'))
   ]
@@ -52,13 +54,14 @@ export function buildPoPdf(po, items, company = {}) {
   // items
   autoTable(doc, {
     startY: y + 16 + Math.max(left.length, right.length) * 13 + 14,
-    head: [['#', 'Item', 'Model', 'Colour/Size', 'Shop', 'Qty', 'Rate', 'Amount']],
+    head: [['#', 'Item', 'Model', 'Colour/Size', 'Shop split', 'Qty', 'Rate', 'Amount']],
     body: items.map((it, i) => [
       i + 1,
       it.item_name,
       it.model_no || '—',
       [it.colour, it.size].filter(Boolean).join(' / ') || '—',
-      it.shops?.code || '—',
+      allocs.filter(a => a.po_item_id === it.id)
+            .map(a => `${a.shops?.code} ${a.qty}`).join(', ') || '—',
       it.qty,
       inr2(it.purchase_rate),
       inr2(it.line_purchase)
@@ -67,12 +70,35 @@ export function buildPoPdf(po, items, company = {}) {
     headStyles: { fillColor: [18, 32, 58], textColor: 255, fontSize: 8.5 },
     columnStyles: {
       0: { cellWidth: 22, halign: 'center' },
-      5: { halign: 'right', cellWidth: 42 },
-      6: { halign: 'right', cellWidth: 62 },
-      7: { halign: 'right', cellWidth: 72 }
+      4: { cellWidth: 96, fontSize: 7.5 },
+      5: { halign: 'right', cellWidth: 38 },
+      6: { halign: 'right', cellWidth: 56 },
+      7: { halign: 'right', cellWidth: 66 }
     },
     margin: { left: M, right: M }
   })
+
+  // shop-wise summary
+  if (allocs.length) {
+    const byShop = {}
+    allocs.forEach(a => {
+      const it = items.find(x => x.id === a.po_item_id)
+      const k = a.shops?.code || '—'
+      byShop[k] = byShop[k] || { name: a.shops?.name || '', qty: 0, val: 0 }
+      byShop[k].qty += a.qty
+      byShop[k].val += a.qty * Number(it?.purchase_rate || 0)
+    })
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 18,
+      head: [['Shop', '', 'Pieces', 'Value']],
+      body: Object.entries(byShop).sort().map(([code, v]) =>
+        [code, v.name, v.qty, inr2(v.val)]),
+      styles: { fontSize: 8.5, cellPadding: 4, lineColor: [223, 227, 234], lineWidth: 0.5 },
+      headStyles: { fillColor: [74, 90, 115], textColor: 255, fontSize: 8 },
+      columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' } },
+      margin: { left: M, right: M }
+    })
+  }
 
   let ey = doc.lastAutoTable.finalY + 16
   doc.setFont('helvetica', 'bold').setFontSize(10)
@@ -94,8 +120,8 @@ export function buildPoPdf(po, items, company = {}) {
   return { blob: doc.output('blob'), filename, doc }
 }
 
-export function downloadPoPdf(po, items, company) {
-  const { doc, filename } = buildPoPdf(po, items, company)
+export function downloadPoPdf(po, items, allocs, company) {
+  const { doc, filename } = buildPoPdf(po, items, allocs, company)
   doc.save(filename)
 }
 
