@@ -11,6 +11,8 @@ import Suppliers from './pages/Suppliers'
 import Items     from './pages/Items'
 import Users     from './pages/Users'
 import Compare   from './pages/Compare'
+import Reports   from './pages/Reports'
+import Settings  from './pages/Settings'
 
 const Ctx = createContext(null)
 export const useMe = () => useContext(Ctx)
@@ -47,6 +49,8 @@ export default function App() {
             <Route path="/orders/new"  element={<NewPO />} />
             <Route path="/orders/:id"  element={<PODetail />} />
             <Route path="/compare"     element={<Compare />} />
+            <Route path="/reports"     element={<Reports />} />
+            <Route path="/settings"    element={<Settings />} />
             <Route path="/suppliers"   element={<Suppliers />} />
             <Route path="/items"       element={<Items />} />
             <Route path="/users"       element={<Users />} />
@@ -132,12 +136,14 @@ function navLinks(role) {
     { to: '/',          label: 'Dashboard', short: 'Home' },
     { to: '/orders',    label: 'Orders',    short: 'Orders' },
     { to: '/orders/new',label: 'New order', short: 'New' },
-    { to: '/compare',   label: 'Compare',   short: 'Compare' }
+    { to: '/compare',   label: 'Compare',   short: 'Compare' },
+    { to: '/reports',   label: 'Reports',   short: 'Reports' }
   ]
   if (['hod', 'admin'].includes(role))
     base.push({ to: '/suppliers', label: 'Suppliers', short: 'Suppliers' },
               { to: '/items',     label: 'Items',     short: 'Items' })
   if (role === 'admin')
-    base.push({ to: '/users', label: 'Users', short: 'Users' })
+    base.push({ to: '/users',    label: 'Users',    short: 'Users' },
+              { to: '/settings', label: 'Settings', short: 'Settings' })
   return base
 }
