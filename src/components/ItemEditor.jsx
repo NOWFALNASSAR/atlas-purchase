@@ -11,9 +11,15 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
   const [history, setHistory] = useState([])
   const [allocQty, setAllocQty] = useState(line.qty || 0)
   const [allocs, setAllocs] = useState([])
+  const [taxRates, setTaxRates] = useState([0, 5, 12, 18, 28])
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { setF(line); setAllocQty(line.qty || 0) }, [line.id])
+
+  useEffect(() => {
+    db.from('settings').select('value').eq('key', 'tax_rates').single()
+      .then(({ data }) => data?.value && setTaxRates(data.value))
+  }, [])
 
   useEffect(() => { if (f.item_id) loadHistory(f.item_id); else setHistory([]) }, [f.item_id])
   useEffect(() => { if (f.id && !open) loadAllocs() }, [f.id, open, allocQty])
@@ -34,6 +40,7 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
   const qty = Number(f.qty) || 0
   const m = margin(f.purchase_rate, f.selling_rate)
   const lineValue = qty * (Number(f.purchase_rate) || 0)
+  const lineTax = Math.round(lineValue * (Number(f.tax_rate) || 0)) / 100
 
   function pickItem(id) {
     const it = items.find(i => i.id === id)
@@ -51,6 +58,7 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
       po_id: f.po_id, item_id: f.item_id, item_name: f.item_name, item_code: f.item_code,
       model_no: f.model_no, colour: f.colour, size: f.size,
       qty: Number(f.qty) || 0,
+      tax_rate: f.tax_rate === '' || f.tax_rate === undefined ? null : Number(f.tax_rate),
       purchase_rate: Number(f.purchase_rate) || 0,
       selling_rate: Number(f.selling_rate) || 0,
       remarks: f.remarks, sort_order: index
@@ -84,6 +92,11 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
             <span className="block text-[11px] text-slate2">
               {[f.model_no, f.colour, f.size].filter(Boolean).join(' · ')}
             </span>
+            {Number(f.tax_rate) > 0 && (
+              <span className="ml-2 rounded bg-paper px-1.5 py-0.5 text-[10px] font-semibold text-slate2">
+                {Number(f.tax_rate)}% tax
+              </span>
+            )}
             {allocs.length > 0 && (
               <span className="mt-0.5 block text-[11px] text-slate2">
                 {allocs.map(a => `${a.shops?.code} ${a.qty}`).join(' · ')}
@@ -136,13 +149,18 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
             onChange={e => setF(v => ({ ...v, qty: e.target.value }))}
             placeholder="e.g. 100" /></div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div><label>Purchase rate ₹</label>
+        <div className="grid grid-cols-3 gap-3">
+          <div><label>Purchase ₹</label>
             <input type="number" inputMode="decimal" value={f.purchase_rate || ''}
               onChange={e => setF(v => ({ ...v, purchase_rate: e.target.value }))} /></div>
-          <div><label>Selling rate ₹</label>
+          <div><label>Selling ₹</label>
             <input type="number" inputMode="decimal" value={f.selling_rate || ''}
               onChange={e => setF(v => ({ ...v, selling_rate: e.target.value }))} /></div>
+          <div><label>Tax %</label>
+            <select value={f.tax_rate ?? ''}
+              onChange={e => setF(v => ({ ...v, tax_rate: e.target.value }))}>
+              {taxRates.map(r => <option key={r} value={r}>{r}%</option>)}
+            </select></div>
         </div>
 
         {f.id ? (
@@ -152,11 +170,10 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
           <p className="text-xs text-slate2">Save the item first, then send stock to shops.</p>
         )}
 
-        <div className="flex items-center justify-between rounded-md bg-ink px-3 py-2 text-white">
-          <span className="text-[11px] uppercase tracking-wider text-white/60">Line value</span>
-          <span className="text-sm font-bold">{inr(lineValue)}</span>
-          <span className="text-[11px] uppercase tracking-wider text-white/60">Margin</span>
-          <span className={'text-sm font-bold ' + (m < 25 ? 'text-gold' : '')}>{m}%</span>
+        <div className="grid grid-cols-3 divide-x divide-white/15 rounded-md bg-ink text-white">
+          <Mini label="Line value" value={inr(lineValue)} />
+          <Mini label={`Tax ${Number(f.tax_rate) || 0}%`} value={inr(lineTax)} />
+          <Mini label="Margin" value={m + '%'} warn={m < 25} />
         </div>
 
         {history.length > 0 && (
@@ -192,6 +209,15 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
           {saving ? 'Saving' : f.id ? 'Done' : 'Add item'}
         </button>
       </div>
+    </div>
+  )
+}
+
+function Mini({ label, value, warn }) {
+  return (
+    <div className="px-2 py-2 text-center">
+      <div className="text-[10px] uppercase tracking-wider text-white/60">{label}</div>
+      <div className={'text-sm font-bold ' + (warn ? 'text-gold' : '')}>{value}</div>
     </div>
   )
 }

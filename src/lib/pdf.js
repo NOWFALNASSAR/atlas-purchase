@@ -47,33 +47,37 @@ export function buildPoPdf(po, items, allocs = [], company = {}) {
     'Entity: ' + (po.entities?.name || ''),
     'Type: ' + (po.purchase_type || '—'),
     'Expected delivery: ' + (po.expected_date ? dt(po.expected_date) : 'To confirm'),
-    'Payment terms: ' + (sup.payment_terms || (sup.credit_days ? sup.credit_days + ' days' : '—'))
+    'Payment terms: ' + (sup.payment_terms || (sup.credit_days ? sup.credit_days + ' days' : '—')),
+    ...(po.transporter ? ['Transporter: ' + po.transporter +
+        (po.transporter_phone ? ' (' + po.transporter_phone + ')' : '')] : []),
+    ...(po.lr_no ? ['LR / docket: ' + po.lr_no] : [])
   ]
   right.forEach((t, i) => doc.text(t, W / 2 + 10, y + 16 + i * 13))
 
   // items
   autoTable(doc, {
     startY: y + 16 + Math.max(left.length, right.length) * 13 + 14,
-    head: [['#', 'Item', 'Model', 'Colour/Size', 'Shop split', 'Qty', 'Rate', 'Amount']],
+    head: [['#', 'Item', 'Model', 'Shop split', 'Qty', 'Rate', 'Tax', 'Amount']],
     body: items.map((it, i) => [
       i + 1,
       it.item_name,
-      it.model_no || '—',
-      [it.colour, it.size].filter(Boolean).join(' / ') || '—',
+      [it.model_no, it.colour, it.size].filter(Boolean).join(' / ') || '—',
       allocs.filter(a => a.po_item_id === it.id)
-            .map(a => `${a.shops?.code} ${a.qty}`).join(', ') || '—',
+            .map(a => `${a.shops?.code} ${a.qty}`).join(', ') || 'Godown',
       it.qty,
       inr2(it.purchase_rate),
+      (it.tax_rate || 0) + '%',
       inr2(it.line_purchase)
     ]),
     styles: { fontSize: 9, cellPadding: 5, lineColor: [223, 227, 234], lineWidth: 0.5 },
     headStyles: { fillColor: [18, 32, 58], textColor: 255, fontSize: 8.5 },
     columnStyles: {
       0: { cellWidth: 22, halign: 'center' },
-      4: { cellWidth: 96, fontSize: 7.5 },
-      5: { halign: 'right', cellWidth: 38 },
-      6: { halign: 'right', cellWidth: 56 },
-      7: { halign: 'right', cellWidth: 66 }
+      3: { cellWidth: 92, fontSize: 7.5 },
+      4: { halign: 'right', cellWidth: 34 },
+      5: { halign: 'right', cellWidth: 52 },
+      6: { halign: 'right', cellWidth: 32 },
+      7: { halign: 'right', cellWidth: 62 }
     },
     margin: { left: M, right: M }
   })
@@ -101,16 +105,38 @@ export function buildPoPdf(po, items, allocs = [], company = {}) {
   }
 
   let ey = doc.lastAutoTable.finalY + 16
-  doc.setFont('helvetica', 'bold').setFontSize(10)
+  doc.setFont('helvetica', 'normal').setFontSize(9.5)
   doc.text('Total quantity: ' + po.total_qty, M, ey)
-  doc.text('Order value: ' + inr2(po.total_purchase), W - M, ey, { align: 'right' })
+
+  const lines = [
+    ['Value', inr2(po.total_purchase)],
+    ['Tax', inr2(po.total_tax || 0)],
+    ['Payable', inr2(po.grand_total || po.total_purchase)]
+  ]
+  lines.forEach(([k, v], i) => {
+    const y = ey + i * 14
+    const bold = i === lines.length - 1
+    doc.setFont('helvetica', bold ? 'bold' : 'normal').setFontSize(bold ? 11 : 9.5)
+    doc.text(k, W - M - 90, y, { align: 'right' })
+    doc.text(v, W - M, y, { align: 'right' })
+  })
+  ey += lines.length * 14 + 6
+
+  if (po.delivery_address) {
+    doc.setFont('helvetica', 'bold').setFontSize(9)
+    doc.text('Deliver to:', M, ey)
+    doc.setFont('helvetica', 'normal')
+    doc.text(po.delivery_address, M + 54, ey, { maxWidth: W / 2 })
+    ey += 16
+  }
 
   if (po.remarks) {
     doc.setFont('helvetica', 'normal').setFontSize(9)
-    doc.text('Remarks: ' + po.remarks, M, ey + 18, { maxWidth: W - M * 2 })
+    doc.text('Remarks: ' + po.remarks, M, ey, { maxWidth: W - M * 2 })
+    ey += 16
   }
 
-  ey += 56
+  ey += 30
   doc.setFontSize(8.5).setTextColor(74, 90, 115)
   doc.text('Please confirm availability and delivery date against this order number.', M, ey)
   doc.text('Goods not matching the ordered specification are liable to be returned.', M, ey + 12)
@@ -131,7 +157,7 @@ export function poMessage(po, company = {}) {
     `Dear ${po.suppliers?.name || 'Supplier'},\n\n` +
     `Please find our Purchase Order ${po.po_no}.\n` +
     `Total quantity: ${po.total_qty}\n` +
-    `Order value: ${inr2(po.total_purchase)}\n` +
+    `Order value: ${inr2(po.grand_total || po.total_purchase)} (incl. tax)\n` +
     (po.expected_date ? `Expected delivery: ${dt(po.expected_date)}\n` : '') +
     `\nKindly confirm availability and delivery date.\n\n` +
     `${company.name || 'Atlas Maharani Group'}`

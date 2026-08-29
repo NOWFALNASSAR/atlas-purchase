@@ -127,16 +127,31 @@ export default function PODetail() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 divide-x divide-line border-t border-line md:grid-cols-4">
+        <div className="grid grid-cols-2 divide-x divide-line border-t border-line md:grid-cols-3">
           <Cell label="Quantity" value={po.total_qty} />
-          <Cell label="Purchase" value={inr(po.total_purchase)} />
+          <Cell label="Purchase value" value={inr(po.total_purchase)} />
+          <Cell label={'Tax' + (po.tax_rate ? ` (${po.tax_rate}% default)` : '')}
+                value={inr(po.total_tax)} />
+        </div>
+        <div className="grid grid-cols-2 divide-x divide-line border-t border-line md:grid-cols-3">
+          <Cell label="Payable to supplier" value={inr(po.grand_total || po.total_purchase)} strong />
           <Cell label="Expected sales" value={inr(po.total_sales)} />
           <Cell label="Margin" value={totalMargin + '%'} warn={totalMargin < 25} />
         </div>
 
-        {(po.expected_date || po.remarks) && (
-          <div className="border-t border-line px-4 py-3 text-[13px]">
+        {(po.expected_date || po.remarks || po.delivery_address || po.transporter) && (
+          <div className="space-y-1 border-t border-line px-4 py-3 text-[13px]">
             {po.expected_date && <div><span className="text-slate2">Expected delivery: </span>{dt(po.expected_date)}</div>}
+            {po.delivery_address && (
+              <div><span className="text-slate2">Deliver to: </span>{po.delivery_address}</div>
+            )}
+            {po.transporter && (
+              <div>
+                <span className="text-slate2">Transporter: </span>{po.transporter}
+                {po.transporter_phone && ' · ' + po.transporter_phone}
+                {po.lr_no && ' · LR ' + po.lr_no}
+              </div>
+            )}
             {po.remarks && <div><span className="text-slate2">Remarks: </span>{po.remarks}</div>}
           </div>
         )}
@@ -257,11 +272,13 @@ export default function PODetail() {
   }
 }
 
-function Cell({ label, value, warn }) {
+function Cell({ label, value, warn, strong }) {
   return (
-    <div className="px-4 py-3">
+    <div className={'px-4 py-3 ' + (strong ? 'bg-ink/5' : '')}>
       <div className="text-[10px] font-semibold uppercase tracking-wider text-slate2">{label}</div>
-      <div className={'text-base font-bold ' + (warn ? 'text-gold' : '')}>{value}</div>
+      <div className={'font-bold ' + (strong ? 'text-lg' : 'text-base') + (warn ? ' text-gold' : '')}>
+        {value}
+      </div>
     </div>
   )
 }

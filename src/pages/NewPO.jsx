@@ -10,9 +10,13 @@ export default function NewPO() {
   const [entities, setEntities] = useState([])
   const [suppliers, setSuppliers] = useState([])
   const [types, setTypes] = useState([])
+  const [taxRates, setTaxRates] = useState([])
+  const [transporters, setTransporters] = useState([])
+  const [showDelivery, setShowDelivery] = useState(false)
   const [locked, setLocked] = useState(null)      // the only entity this user may use
   const [f, setF] = useState({ entity_id: '', supplier_id: '', purchase_type: '',
-                               expected_date: '', remarks: '' })
+                               expected_date: '', remarks: '', tax_rate: 5,
+                               delivery_address: '', transporter: '', transporter_phone: '', lr_no: '' })
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -27,6 +31,10 @@ export default function NewPO() {
       })
     db.from('suppliers').select('*').eq('active', true).order('name')
       .then(({ data }) => setSuppliers(data || []))
+    db.from('settings').select('value').eq('key', 'tax_rates').single()
+      .then(({ data }) => setTaxRates(data?.value || [0, 5, 12, 18, 28]))
+    db.from('settings').select('value').eq('key', 'transporters').single()
+      .then(({ data }) => setTransporters(data?.value || []))
     db.from('settings').select('value').eq('key', 'purchase_types').single()
       .then(({ data }) => {
         const list = data?.value || []
@@ -59,6 +67,11 @@ export default function NewPO() {
       entity_id: f.entity_id,
       supplier_id: f.supplier_id,
       purchase_type: f.purchase_type,
+      tax_rate: Number(f.tax_rate) || 0,
+      delivery_address: f.delivery_address || null,
+      transporter: f.transporter || null,
+      transporter_phone: f.transporter_phone || null,
+      lr_no: f.lr_no || null,
       expected_date: f.expected_date || null,
       remarks: f.remarks || null,
       created_by: me.id,
@@ -113,11 +126,59 @@ export default function NewPO() {
         </div>
         )}
 
+        {f.supplier_id && (
+        <div>
+          <label>Tax rate (default for all items)</label>
+          <select value={f.tax_rate}
+            onChange={e => setF(v => ({ ...v, tax_rate: e.target.value }))}>
+            {taxRates.map(r => <option key={r} value={r}>{r}%</option>)}
+          </select>
+          <p className="mt-1 text-[11px] text-slate2">
+            You can change the rate on any individual item later.
+          </p>
+        </div>
+        )}
+
         <div>
           <label>Expected delivery</label>
           <input type="date" value={f.expected_date}
             onChange={e => setF(v => ({ ...v, expected_date: e.target.value }))} />
         </div>
+
+        <div>
+          <button type="button" onClick={() => setShowDelivery(x => !x)}
+            className="text-xs font-semibold text-gold underline">
+            {showDelivery ? '− Hide delivery details' : '+ Delivery address and transporter'}
+          </button>
+        </div>
+
+        {showDelivery && (
+          <div className="space-y-3 rounded-md bg-paper p-3">
+            <div>
+              <label>Deliver to</label>
+              <textarea rows={2} value={f.delivery_address}
+                onChange={e => setF(v => ({ ...v, delivery_address: e.target.value }))}
+                placeholder="Leave blank to deliver to the usual godown" />
+            </div>
+            <div>
+              <label>Transporter</label>
+              <input list="transporter-list" value={f.transporter}
+                onChange={e => setF(v => ({ ...v, transporter: e.target.value }))}
+                placeholder="Name of transporter or parcel service" />
+              <datalist id="transporter-list">
+                {transporters.map(t => <option key={t} value={t} />)}
+              </datalist>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label>Transporter phone</label>
+                <input value={f.transporter_phone}
+                  onChange={e => setF(v => ({ ...v, transporter_phone: e.target.value }))} /></div>
+              <div><label>LR / docket no</label>
+                <input value={f.lr_no}
+                  onChange={e => setF(v => ({ ...v, lr_no: e.target.value }))} /></div>
+            </div>
+          </div>
+        )}
 
         <div>
           <label>General remarks</label>
