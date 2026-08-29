@@ -159,7 +159,8 @@ export async function uploadPoPdf(po, items, allocs, company) {
     .upload(path, blob, { contentType: 'application/pdf', upsert: true })
   if (error) throw error
 
-  const { data } = db.storage.from('po-pdfs').getPublicUrl(path)
+  // download: forces a real file save instead of opening in the browser viewer
+  const { data } = db.storage.from('po-pdfs').getPublicUrl(path, { download: filename })
   const url = data.publicUrl
 
   await db.from('purchase_orders').update({ pdf_url: url }).eq('id', po.id)
@@ -167,8 +168,19 @@ export async function uploadPoPdf(po, items, allocs, company) {
 }
 
 export function downloadPoPdf(po, items, allocs, company) {
-  const { doc, filename } = buildPoPdf(po, items, allocs, company)
-  doc.save(filename)
+  const { blob, filename } = buildPoPdf(po, items, allocs, company)
+
+  // Build the download ourselves rather than using doc.save(), so phone
+  // browsers save the file instead of opening it in a preview tab.
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 4000)
 }
 
 /** Message text that goes with the PO on WhatsApp / email */
