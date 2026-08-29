@@ -24,7 +24,7 @@ export default function POList() {
   async function load() {
     setLoading(true)
     let sel = db.from('purchase_orders')
-      .select('id,po_no,status,pending_role,total_purchase,total_qty,created_at,created_by,suppliers(name),entities(code)')
+      .select('id,po_no,status,pending_role,purchase_type,total_purchase,total_qty,created_at,created_by,suppliers(name),entities(code)')
       .order('created_at', { ascending: false }).limit(200)
 
     if (tab === 'mine')     sel = sel.eq('created_by', me.id)
@@ -86,6 +86,11 @@ export default function POList() {
                       <div className="font-mono text-[11px] text-slate2">
                         {r.po_no || 'Draft'} · {r.entities?.code} · {dt(r.created_at)}
                       </div>
+                      {r.purchase_type && (
+                        <span className="mt-0.5 inline-block rounded bg-paper px-1.5 py-0.5 text-[10px] font-semibold text-slate2">
+                          {r.purchase_type}
+                        </span>
+                      )}
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-semibold">{inr(r.total_purchase)}</div>
