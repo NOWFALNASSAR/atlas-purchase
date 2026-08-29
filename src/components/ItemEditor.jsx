@@ -31,7 +31,7 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
     setAllocs(data || [])
   }
 
-  const qty = allocQty || f.qty || 0
+  const qty = Number(f.qty) || 0
   const m = margin(f.purchase_rate, f.selling_rate)
   const lineValue = qty * (Number(f.purchase_rate) || 0)
 
@@ -45,15 +45,16 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
 
   async function save() {
     if (!f.item_name) return alert('Choose an item first')
+    if (!f.qty || Number(f.qty) <= 0) return alert('Enter the total quantity')
     setSaving(true)
     const payload = {
       po_id: f.po_id, item_id: f.item_id, item_name: f.item_name, item_code: f.item_code,
       model_no: f.model_no, colour: f.colour, size: f.size,
+      qty: Number(f.qty) || 0,
       purchase_rate: Number(f.purchase_rate) || 0,
       selling_rate: Number(f.selling_rate) || 0,
       remarks: f.remarks, sort_order: index
     }
-    if (!f.id) payload.qty = 0
     const { data, error } = f.id
       ? await db.from('po_items').update(payload).eq('id', f.id).select().single()
       : await db.from('po_items').insert(payload).select().single()
@@ -88,11 +89,15 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
                 {allocs.map(a => `${a.shops?.code} ${a.qty}`).join(' · ')}
               </span>
             )}
-            {allocs.length === 0 && f.id && (
-              <span className="mt-0.5 block text-[11px] font-semibold text-bad">
-                Not split across shops yet
-              </span>
-            )}
+            {f.id && (() => {
+              const sent = allocs.reduce((s, a) => s + a.qty, 0)
+              const left = qty - sent
+              return left > 0 ? (
+                <span className="mt-0.5 block text-[11px] text-slate2">
+                  {sent > 0 ? `${sent} to shops · ` : ''}{left} in godown
+                </span>
+              ) : null
+            })()}
           </span>
           <span className="text-right">
             <span className="block text-sm font-semibold">{qty} × {inr(f.purchase_rate)}</span>
@@ -126,6 +131,11 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
             <input value={f.size || ''} onChange={e => setF(v => ({ ...v, size: e.target.value }))} /></div>
         </div>
 
+        <div><label>Total quantity bought</label>
+          <input type="number" inputMode="numeric" value={f.qty || ''}
+            onChange={e => setF(v => ({ ...v, qty: e.target.value }))}
+            placeholder="e.g. 100" /></div>
+
         <div className="grid grid-cols-2 gap-3">
           <div><label>Purchase rate ₹</label>
             <input type="number" inputMode="decimal" value={f.purchase_rate || ''}
@@ -137,9 +147,9 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
 
         {f.id ? (
           <ShopSplit poId={f.po_id} itemId={f.id} shops={shops} editable={editable}
-                     onChange={setAllocQty} />
+                     totalQty={Number(f.qty) || 0} onChange={setAllocQty} />
         ) : (
-          <p className="text-xs text-slate2">Save the item first, then split it across shops.</p>
+          <p className="text-xs text-slate2">Save the item first, then send stock to shops.</p>
         )}
 
         <div className="flex items-center justify-between rounded-md bg-ink px-3 py-2 text-white">
