@@ -2,29 +2,40 @@ import { useEffect, useState } from 'react'
 import { db, inr, margin, dt } from '../lib/db'
 import Picker from './Picker'
 import PhotoStrip from './PhotoStrip'
+import ShopSplit from './ShopSplit'
 
-/** One editable line of a purchase order. */
-export default function ItemEditor({ line, index, items, shops, supplierId, onSaved, onDeleted, editable }) {
+/** One line of a purchase order. Quantity comes from the shop split. */
+export default function ItemEditor({ line, index, items, shops, onSaved, onDeleted, editable }) {
   const [f, setF] = useState(line)
   const [open, setOpen] = useState(!line.item_name)
   const [history, setHistory] = useState([])
+  const [allocQty, setAllocQty] = useState(line.qty || 0)
+  const [allocs, setAllocs] = useState([])
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => { setF(line) }, [line.id])
+  useEffect(() => { setF(line); setAllocQty(line.qty || 0) }, [line.id])
 
-  const m = margin(f.purchase_rate, f.selling_rate)
-  const lineValue = (Number(f.qty) || 0) * (Number(f.purchase_rate) || 0)
+  useEffect(() => { if (f.item_id) loadHistory(f.item_id); else setHistory([]) }, [f.item_id])
+  useEffect(() => { if (f.id && !open) loadAllocs() }, [f.id, open, allocQty])
 
   async function loadHistory(itemId) {
-    if (!itemId) return setHistory([])
     const { data } = await db.from('v_item_rate_history')
-      .select('supplier_name,purchase_rate,qty,created_at,po_no')
+      .select('supplier_name,purchase_rate,qty,created_at')
       .eq('item_id', itemId).order('created_at', { ascending: false }).limit(5)
     setHistory(data || [])
   }
-  useEffect(() => { loadHistory(f.item_id) }, [f.item_id])
 
-  function pickItem(id, opt) {
+  async function loadAllocs() {
+    const { data } = await db.from('po_item_allocations')
+      .select('qty, shops(code)').eq('po_item_id', f.id)
+    setAllocs(data || [])
+  }
+
+  const qty = allocQty || f.qty || 0
+  const m = margin(f.purchase_rate, f.selling_rate)
+  const lineValue = qty * (Number(f.purchase_rate) || 0)
+
+  function pickItem(id) {
     const it = items.find(i => i.id === id)
     setF(v => ({
       ...v, item_id: id, item_name: it.name, item_code: it.code,
@@ -34,20 +45,24 @@ export default function ItemEditor({ line, index, items, shops, supplierId, onSa
 
   async function save() {
     if (!f.item_name) return alert('Choose an item first')
-    if (!f.qty || f.qty <= 0) return alert('Enter a quantity')
     setSaving(true)
     const payload = {
       po_id: f.po_id, item_id: f.item_id, item_name: f.item_name, item_code: f.item_code,
-      model_no: f.model_no, colour: f.colour, size: f.size, shop_id: f.shop_id || null,
-      qty: Number(f.qty), purchase_rate: Number(f.purchase_rate) || 0,
-      selling_rate: Number(f.selling_rate) || 0, remarks: f.remarks, sort_order: index
+      model_no: f.model_no, colour: f.colour, size: f.size,
+      purchase_rate: Number(f.purchase_rate) || 0,
+      selling_rate: Number(f.selling_rate) || 0,
+      remarks: f.remarks, sort_order: index
     }
+    if (!f.id) payload.qty = 0
     const { data, error } = f.id
       ? await db.from('po_items').update(payload).eq('id', f.id).select().single()
       : await db.from('po_items').insert(payload).select().single()
     setSaving(false)
     if (error) return alert(error.message)
-    setF(data); setOpen(false); onSaved(data)
+    setF(data)
+    onSaved(data)
+    if (!f.id) return           // stay open so the shop split can be filled in
+    setOpen(false)
   }
 
   async function del() {
@@ -56,7 +71,7 @@ export default function ItemEditor({ line, index, items, shops, supplierId, onSa
     onDeleted(f)
   }
 
-  /* ---------- collapsed summary row ---------- */
+  /* ---------- collapsed ---------- */
   if (!open) {
     return (
       <div className="border-t border-line">
@@ -66,12 +81,21 @@ export default function ItemEditor({ line, index, items, shops, supplierId, onSa
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold">{f.item_name}</span>
             <span className="block text-[11px] text-slate2">
-              {[f.model_no, f.colour, f.size, shops.find(s => s.id === f.shop_id)?.code]
-                .filter(Boolean).join(' · ')}
+              {[f.model_no, f.colour, f.size].filter(Boolean).join(' · ')}
             </span>
+            {allocs.length > 0 && (
+              <span className="mt-0.5 block text-[11px] text-slate2">
+                {allocs.map(a => `${a.shops?.code} ${a.qty}`).join(' · ')}
+              </span>
+            )}
+            {allocs.length === 0 && f.id && (
+              <span className="mt-0.5 block text-[11px] font-semibold text-bad">
+                Not split across shops yet
+              </span>
+            )}
           </span>
           <span className="text-right">
-            <span className="block text-sm font-semibold">{f.qty} × {inr(f.purchase_rate)}</span>
+            <span className="block text-sm font-semibold">{qty} × {inr(f.purchase_rate)}</span>
             <span className="block text-[11px] text-slate2">{inr(lineValue)} · {m}%</span>
           </span>
         </button>
@@ -80,7 +104,7 @@ export default function ItemEditor({ line, index, items, shops, supplierId, onSa
     )
   }
 
-  /* ---------- expanded editor ---------- */
+  /* ---------- expanded ---------- */
   return (
     <div className="border-t-2 border-ink bg-paper/60 p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -102,21 +126,21 @@ export default function ItemEditor({ line, index, items, shops, supplierId, onSa
             <input value={f.size || ''} onChange={e => setF(v => ({ ...v, size: e.target.value }))} /></div>
         </div>
 
-        <Picker label="Shop" placeholder="Which shop is this for?"
-          options={shops.map(s => ({ id: s.id, label: s.name, sub: s.code }))}
-          value={f.shop_id} onChange={id => setF(v => ({ ...v, shop_id: id }))} allowEmpty />
-
-        <div className="grid grid-cols-3 gap-3">
-          <div><label>Quantity</label>
-            <input type="number" inputMode="numeric" value={f.qty || ''}
-              onChange={e => setF(v => ({ ...v, qty: e.target.value }))} /></div>
-          <div><label>Purchase ₹</label>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label>Purchase rate ₹</label>
             <input type="number" inputMode="decimal" value={f.purchase_rate || ''}
               onChange={e => setF(v => ({ ...v, purchase_rate: e.target.value }))} /></div>
-          <div><label>Selling ₹</label>
+          <div><label>Selling rate ₹</label>
             <input type="number" inputMode="decimal" value={f.selling_rate || ''}
               onChange={e => setF(v => ({ ...v, selling_rate: e.target.value }))} /></div>
         </div>
+
+        {f.id ? (
+          <ShopSplit poId={f.po_id} itemId={f.id} shops={shops} editable={editable}
+                     onChange={setAllocQty} />
+        ) : (
+          <p className="text-xs text-slate2">Save the item first, then split it across shops.</p>
+        )}
 
         <div className="flex items-center justify-between rounded-md bg-ink px-3 py-2 text-white">
           <span className="text-[11px] uppercase tracking-wider text-white/60">Line value</span>
@@ -150,15 +174,12 @@ export default function ItemEditor({ line, index, items, shops, supplierId, onSa
             placeholder="Fast moving / new design / repeat order" /></div>
 
         {f.id && (
-          <div>
-            <label>Photos</label>
-            <PhotoStrip poId={f.po_id} itemId={f.id} editable />
-          </div>
+          <div><label>Photos</label>
+            <PhotoStrip poId={f.po_id} itemId={f.id} editable /></div>
         )}
-        {!f.id && <div className="text-xs text-slate2">Save the item first, then add photos.</div>}
 
         <button type="button" className="btn-dark w-full" onClick={save} disabled={saving}>
-          {saving ? 'Saving' : f.id ? 'Save item' : 'Add item'}
+          {saving ? 'Saving' : f.id ? 'Done' : 'Add item'}
         </button>
       </div>
     </div>
