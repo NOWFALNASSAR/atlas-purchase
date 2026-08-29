@@ -1,26 +1,30 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { db, lakh, inr, dt, statusStyle } from '../lib/db'
-import { useMe } from '../App'
+import { useMe, useEntity } from '../App'
+import EntityBar from '../components/EntityBar'
 
 export default function Dashboard() {
   const me = useMe()
+  const { entityId, entities } = useEntity()
   const [counts, setCounts] = useState({})
   const [mine, setMine] = useState([])
   const [waiting, setWaiting] = useState([])
   const [month, setMonth] = useState({ value: 0, count: 0 })
   const [byEntity, setByEntity] = useState([])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { if (entityId) load() }, [entityId])
 
   async function load() {
     const first = new Date(); first.setDate(1); first.setHours(0, 0, 0, 0)
 
-    const { data: pos } = await db
+    let q = db
       .from('purchase_orders')
       .select('id,po_no,status,pending_role,total_purchase,created_at,created_by,entity_id,suppliers(name),entities(code,name)')
       .order('created_at', { ascending: false })
       .limit(400)
+    if (entityId && entityId !== 'mixed') q = q.eq('entity_id', entityId)
+    const { data: pos } = await q
 
     const list = pos || []
     const c = {}
@@ -48,11 +52,18 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold">Purchase dashboard</h1>
-        <p className="text-sm text-slate2">
-          {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
-        </p>
+      <div className="space-y-3">
+        <div>
+          <h1 className="text-xl font-bold">Purchase dashboard</h1>
+          <p className="text-sm text-slate2">
+            {entityId === 'mixed' && entities.length > 1
+              ? 'All entities together'
+              : entities.find(e => e.id === entityId)?.name || ''}
+            {' · '}
+            {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </p>
+        </div>
+        <EntityBar />
       </div>
 
       {waiting.length > 0 && (
@@ -88,7 +99,7 @@ export default function Dashboard() {
         <Stat label="My drafts" value={counts.draft || 0} to="/orders?status=draft" />
       </section>
 
-      {byEntity.length > 0 && (
+      {byEntity.length > 1 && (
         <section className="card p-4">
           <h2 className="mb-3 text-sm font-bold">Purchase value by entity — this month</h2>
           <ul className="space-y-2.5">

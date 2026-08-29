@@ -17,9 +17,14 @@ import Settings  from './pages/Settings'
 const Ctx = createContext(null)
 export const useMe = () => useContext(Ctx)
 
+const EntityCtx = createContext(null)
+export const useEntity = () => useContext(EntityCtx)
+
 export default function App() {
   const [session, setSession] = useState(undefined)
   const [me, setMe] = useState(null)
+  const [entities, setEntities] = useState([])
+  const [entityId, setEntityId] = useState('mixed')
 
   useEffect(() => {
     db.auth.getSession().then(({ data }) => setSession(data.session))
@@ -33,6 +38,24 @@ export default function App() {
       .then(({ data }) => setMe({ ...data, email: session.user.email }))
   }, [session])
 
+  // which entities this person may see, and which one they are looking at
+  useEffect(() => {
+    if (!me) return
+    db.from('entities').select('*').eq('active', true).order('code').then(({ data }) => {
+      const allowed = (me.entity_ids?.length ? data.filter(e => me.entity_ids.includes(e.id)) : data) || []
+      setEntities(allowed)
+      const saved = localStorage.getItem('entityFilter')
+      if (allowed.length === 1) setEntityId(allowed[0].id)
+      else if (saved && (saved === 'mixed' || allowed.some(e => e.id === saved))) setEntityId(saved)
+      else setEntityId('mixed')
+    })
+  }, [me])
+
+  function chooseEntity(id) {
+    setEntityId(id)
+    localStorage.setItem('entityFilter', id)
+  }
+
   if (session === undefined) return <Splash text="Loading" />
   if (!session) return <Login />
   if (!me) return <Splash text="Opening your account" />
@@ -40,6 +63,7 @@ export default function App() {
 
   return (
     <Ctx.Provider value={me}>
+     <EntityCtx.Provider value={{ entities, entityId, setEntityId: chooseEntity }}>
       <div className="min-h-screen pb-24 md:pb-0">
         <TopBar me={me} />
         <main className="mx-auto max-w-6xl px-4 py-5">
@@ -59,6 +83,7 @@ export default function App() {
         </main>
         <BottomNav me={me} />
       </div>
+     </EntityCtx.Provider>
     </Ctx.Provider>
   )
 }

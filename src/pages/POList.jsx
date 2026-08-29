@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { db, inr, dt, statusStyle } from '../lib/db'
-import { useMe } from '../App'
+import { useMe, useEntity } from '../App'
+import EntityBar from '../components/EntityBar'
 
 const TABS = [
   { key: 'waiting',  label: 'For me' },
@@ -13,13 +14,14 @@ const TABS = [
 
 export default function POList() {
   const me = useMe()
+  const { entityId } = useEntity()
   const [sp, setSp] = useSearchParams()
   const tab = sp.get('filter') || sp.get('status') || 'mine'
   const [rows, setRows] = useState([])
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => { load() }, [tab])
+  useEffect(() => { if (entityId) load() }, [tab, entityId])
 
   async function load() {
     setLoading(true)
@@ -31,6 +33,7 @@ export default function POList() {
     if (tab === 'pending')  sel = sel.eq('status', 'pending')
     if (tab === 'approved') sel = sel.in('status', ['approved', 'sent', 'confirmed'])
     if (tab === 'draft')    sel = sel.eq('status', 'draft').eq('created_by', me.id)
+    if (entityId && entityId !== 'mixed') sel = sel.eq('entity_id', entityId)
     if (tab === 'waiting') {
       sel = sel.eq('status', 'pending')
       if (me.role !== 'admin') sel = sel.eq('pending_role', me.role)
@@ -53,6 +56,8 @@ export default function POList() {
         <h1 className="text-xl font-bold">Purchase orders</h1>
         <Link to="/orders/new" className="btn-gold">New order</Link>
       </div>
+
+      <EntityBar />
 
       <div className="flex gap-1 overflow-x-auto pb-1">
         {TABS.map(t => (

@@ -28,8 +28,27 @@ export default function NewPO() {
     db.from('suppliers').select('*').eq('active', true).order('name')
       .then(({ data }) => setSuppliers(data || []))
     db.from('settings').select('value').eq('key', 'purchase_types').single()
-      .then(({ data }) => setTypes(data?.value || []))
+      .then(({ data }) => {
+        const list = data?.value || []
+        setTypes(list)
+        const fallback = list.find(t => t.toLowerCase().replace(/[^a-z]/g, '') === 'noncc')
+        if (fallback) setF(v => (v.purchase_type ? v : { ...v, purchase_type: fallback }))
+      })
   }, [])
+
+  const canAddType = ['hod', 'admin'].includes(me.role)
+
+  async function addType() {
+    const name = prompt('Name of the new purchase type')?.trim()
+    if (!name) return
+    if (types.some(t => t.toLowerCase() === name.toLowerCase()))
+      return alert('That type already exists')
+    const next = [...types, name]
+    const { error } = await db.from('settings').update({ value: next }).eq('key', 'purchase_types')
+    if (error) return alert('Could not save: ' + error.message)
+    setTypes(next)
+    setF(v => ({ ...v, purchase_type: name }))
+  }
 
   async function start() {
     if (!f.entity_id) return alert('Choose the entity')
@@ -79,21 +98,20 @@ export default function NewPO() {
           }))}
           value={f.supplier_id} onChange={id => setF(v => ({ ...v, supplier_id: id }))} />
 
+        {f.supplier_id && (
         <div>
           <label>Purchase type</label>
-          <div className="flex flex-wrap gap-2">
-            {types.map(t => (
-              <button key={t} type="button"
-                onClick={() => setF(v => ({ ...v, purchase_type: t }))}
-                className={'rounded-md border px-3 py-1.5 text-sm font-semibold ' +
-                  (f.purchase_type === t
-                    ? 'border-ink bg-ink text-white'
-                    : 'border-line bg-white text-slate2')}>
-                {t}
-              </button>
-            ))}
-          </div>
+          <select value={f.purchase_type}
+            onChange={e => {
+              if (e.target.value === '__new') return addType()
+              setF(v => ({ ...v, purchase_type: e.target.value }))
+            }}>
+            {!types.length && <option value="">Loading</option>}
+            {types.map(t => <option key={t} value={t}>{t}</option>)}
+            {canAddType && <option value="__new">+ Add a new type…</option>}
+          </select>
         </div>
+        )}
 
         <div>
           <label>Expected delivery</label>
