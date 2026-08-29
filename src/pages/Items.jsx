@@ -30,6 +30,24 @@ export default function Items() {
     setEdit(null); load()
   }
 
+  function downloadTemplate() {
+    const sample = [{
+      'Item Code': 'LAD-KUR-00001',
+      'Item Name': 'Ladies Kurti Cotton',
+      'Category': 'Ladies',
+      'Sub Category': 'Kurti',
+      'Model': 'K101',
+      'Fabric': 'Cotton',
+      'Brand': '',
+      'Selling Rate': 699
+    }]
+    const ws = XLSX.utils.json_to_sheet(sample)
+    ws['!cols'] = Object.keys(sample[0]).map(k => ({ wch: Math.max(k.length + 4, 16) }))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Items')
+    XLSX.writeFile(wb, 'item-upload-format.xlsx')
+  }
+
   async function readFile(file) {
     const wb = XLSX.read(await file.arrayBuffer())
     const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])
@@ -79,6 +97,7 @@ export default function Items() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Items</h1>
         <div className="flex gap-2">
+          <button className="btn-ghost" onClick={downloadTemplate}>See format</button>
           <label className="btn-ghost cursor-pointer">
             Import Excel
             <input type="file" accept=".xlsx,.xls,.csv" className="hidden"
@@ -87,6 +106,33 @@ export default function Items() {
           <button className="btn-gold" onClick={() => setEdit({ ...BLANK })}>Add item</button>
         </div>
       </div>
+
+      <details className="card p-3 text-[13px]">
+        <summary className="cursor-pointer font-semibold">Excel upload format</summary>
+        <p className="mt-2 text-slate2">
+          Column headings must match exactly. <b>Item Code</b> and <b>Item Name</b>
+          are compulsory; the rest are optional.
+        </p>
+        <div className="mt-2 overflow-x-auto">
+          <table className="text-[11px]">
+            <thead className="bg-paper">
+              <tr>{['Item Code','Item Name','Category','Sub Category','Model','Fabric','Brand','Selling Rate']
+                .map(h => <th key={h} className="whitespace-nowrap border border-line px-2 py-1">{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              <tr>{['LAD-KUR-00001','Ladies Kurti Cotton','Ladies','Kurti','K101','Cotton','','699']
+                .map((c,i) => <td key={i} className="whitespace-nowrap border border-line px-2 py-1">{c}</td>)}</tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-slate2">
+          Item code format: CATEGORY-SUBCATEGORY-SERIAL, decided once and never changed.
+          Codes must be unique — a repeat code is treated as the same item.
+        </p>
+        <button className="btn-ghost mt-3" onClick={downloadTemplate}>
+          Download blank format
+        </button>
+      </details>
 
       <div className="grid grid-cols-3 gap-2">
         <input className="col-span-2" value={q} onChange={e => setQ(e.target.value)}

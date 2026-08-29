@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { db, inr, dt, dtTime, statusStyle, roleLabel, margin } from '../lib/db'
-import { downloadPoPdf, poMessage, whatsappLink } from '../lib/pdf'
+import { downloadPoPdf, uploadPoPdf, buildPoPdf, poMessage, whatsappLink } from '../lib/pdf'
 import { useMe } from '../App'
 import ItemEditor from '../components/ItemEditor'
 
@@ -228,12 +228,16 @@ export default function PODetail() {
         )}
         {canSend && (
           <>
+            <button className="btn-dark w-full" onClick={sendWhatsapp} disabled={busy}>
+              {busy ? 'Preparing PDF' : 'Send PDF on WhatsApp'}
+            </button>
             <div className="grid grid-cols-2 gap-2">
-              <button className="btn-dark" onClick={sendWhatsapp}>Send on WhatsApp</button>
-              <button className="btn-ghost" onClick={sendEmail}>Send by email</button>
+              <button className="btn-ghost" onClick={sendEmail} disabled={busy}>Send by email</button>
+              <button className="btn-ghost" onClick={copyLink} disabled={busy}>Copy PDF link</button>
             </div>
             <p className="text-center text-xs text-slate2">
-              The PDF downloads first — attach it in WhatsApp before sending.
+              On a phone the PDF attaches itself to the message. On a laptop the
+              message carries a link the supplier can tap to open the PDF.
             </p>
           </>
         )}

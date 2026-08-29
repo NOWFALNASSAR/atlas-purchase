@@ -31,6 +31,27 @@ export default function Suppliers() {
     setEdit(null); load()
   }
 
+  /* ---------- blank template so nobody guesses the columns ---------- */
+  function downloadTemplate() {
+    const sample = [{
+      'Supplier Name': 'ABC Textiles',
+      'Company Name': 'ABC Textiles Pvt Ltd',
+      'GSTIN': '32ABCDE1234F1Z5',
+      'Contact Person': 'Rajesh',
+      'Mobile': '9000000001',
+      'WhatsApp': '9000000001',
+      'Email': 'abc@example.com',
+      'Address': 'Erode, Tamil Nadu',
+      'Credit Days': 30,
+      'Category': 'Ladies'
+    }]
+    const ws = XLSX.utils.json_to_sheet(sample)
+    ws['!cols'] = Object.keys(sample[0]).map(k => ({ wch: Math.max(k.length + 4, 16) }))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Suppliers')
+    XLSX.writeFile(wb, 'supplier-upload-format.xlsx')
+  }
+
   /* ---------- Excel import ---------- */
   async function readFile(file) {
     const buf = await file.arrayBuffer()
@@ -74,6 +95,7 @@ export default function Suppliers() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Suppliers</h1>
         <div className="flex gap-2">
+          <button className="btn-ghost" onClick={downloadTemplate}>See format</button>
           <label className="btn-ghost cursor-pointer">
             Import Excel
             <input type="file" accept=".xlsx,.xls,.csv" className="hidden"
@@ -84,6 +106,33 @@ export default function Suppliers() {
       </div>
 
       <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search suppliers" />
+
+      <details className="card p-3 text-[13px]">
+        <summary className="cursor-pointer font-semibold">Excel upload format</summary>
+        <p className="mt-2 text-slate2">
+          Column headings must match exactly. Only <b>Supplier Name</b> is compulsory —
+          leave the rest blank if you don't have them yet.
+        </p>
+        <div className="mt-2 overflow-x-auto">
+          <table className="text-[11px]">
+            <thead className="bg-paper">
+              <tr>{['Supplier Name','Company Name','GSTIN','Contact Person','Mobile','WhatsApp','Email','Address','Credit Days','Category']
+                .map(h => <th key={h} className="whitespace-nowrap border border-line px-2 py-1">{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              <tr>{['ABC Textiles','ABC Textiles Pvt Ltd','32ABCDE1234F1Z5','Rajesh','9000000001','9000000001','abc@example.com','Erode','30','Ladies']
+                .map((c,i) => <td key={i} className="whitespace-nowrap border border-line px-2 py-1">{c}</td>)}</tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-slate2">
+          WhatsApp numbers: 10 digits, no +91, no spaces. One row per supplier —
+          merge "ABC Textile" and "ABC Textiles" into one before uploading.
+        </p>
+        <button className="btn-ghost mt-3" onClick={downloadTemplate}>
+          Download blank format
+        </button>
+      </details>
 
       <ul className="card divide-y divide-line">
         {shown.map(r => (

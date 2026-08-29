@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { inr2, dt } from './db'
+import { db, inr2, dt } from './db'
 
 /**
  * Builds the supplier-facing PO.
@@ -146,19 +146,40 @@ export function buildPoPdf(po, items, allocs = [], company = {}) {
   return { blob: doc.output('blob'), filename, doc }
 }
 
+/**
+ * Uploads the PO PDF and returns a link the supplier can open.
+ * WhatsApp cannot attach a file from a web page, so we send the link
+ * instead — one tap and the supplier has the PDF.
+ */
+export async function uploadPoPdf(po, items, allocs, company) {
+  const { blob, filename } = buildPoPdf(po, items, allocs, company)
+  const path = `${po.id}/${crypto.randomUUID()}-${filename}`
+
+  const { error } = await db.storage.from('po-pdfs')
+    .upload(path, blob, { contentType: 'application/pdf', upsert: true })
+  if (error) throw error
+
+  const { data } = db.storage.from('po-pdfs').getPublicUrl(path)
+  const url = data.publicUrl
+
+  await db.from('purchase_orders').update({ pdf_url: url }).eq('id', po.id)
+  return url
+}
+
 export function downloadPoPdf(po, items, allocs, company) {
   const { doc, filename } = buildPoPdf(po, items, allocs, company)
   doc.save(filename)
 }
 
 /** Message text that goes with the PO on WhatsApp / email */
-export function poMessage(po, company = {}) {
+export function poMessage(po, company = {}, pdfUrl) {
   return (
     `Dear ${po.suppliers?.name || 'Supplier'},\n\n` +
     `Please find our Purchase Order ${po.po_no}.\n` +
     `Total quantity: ${po.total_qty}\n` +
     `Order value: ${inr2(po.grand_total || po.total_purchase)} (incl. tax)\n` +
     (po.expected_date ? `Expected delivery: ${dt(po.expected_date)}\n` : '') +
+    (pdfUrl ? `\nPurchase order PDF:\n${pdfUrl}\n` : '') +
     `\nKindly confirm availability and delivery date.\n\n` +
     `${company.name || 'Atlas Maharani Group'}`
   )

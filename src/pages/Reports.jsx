@@ -16,6 +16,7 @@ export default function Reports() {
   const [type, setType] = useState('')
   const [rows, setRows] = useState([])
   const [view, setView] = useState('shop')
+  const [includeDrafts, setIncludeDrafts] = useState(false)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -28,13 +29,17 @@ export default function Reports() {
       .then(({ data }) => setTypes(data?.value || []))
   }, [])
 
-  useEffect(() => { run() }, [from, to, entity, type])
+  const statuses = includeDrafts
+    ? ['draft', 'pending', 'approved', 'sent', 'confirmed', 'partial', 'closed']
+    : ['approved', 'sent', 'confirmed', 'partial', 'closed']
+
+  useEffect(() => { run() }, [from, to, entity, type, includeDrafts])
 
   async function run() {
     setLoading(true)
-    let q = db.from('v_shop_allocation').select('*')
+    let q = db.from('v_purchase_lines').select('*')
       .gte('created_at', from).lte('created_at', to + 'T23:59:59')
-      .in('status', ['approved', 'sent', 'confirmed', 'partial', 'closed'])
+      .in('status', statuses)
     if (entity) q = q.eq('entity_id', entity)
     if (type) q = q.eq('purchase_type', type)
     const { data } = await q.limit(5000)
@@ -47,8 +52,8 @@ export default function Reports() {
       const k = r[key] || '—'
       m[k] = m[k] || { qty: 0, purchase: 0, sales: 0 }
       m[k].qty += r.qty
-      m[k].purchase += Number(r.alloc_purchase)
-      m[k].sales += Number(r.alloc_sales)
+      m[k].purchase += Number(r.line_value)
+      m[k].sales += Number(r.line_sales)
     })
     return Object.entries(m).sort((a, b) => b[1].purchase - a[1].purchase)
   }
@@ -63,7 +68,7 @@ export default function Reports() {
   }
 
   const data = group(views[view].key)
-  const totalPurchase = rows.reduce((s, r) => s + Number(r.alloc_purchase), 0)
+  const totalPurchase = rows.reduce((s, r) => s + Number(r.line_value), 0)
   const totalQty = rows.reduce((s, r) => s + r.qty, 0)
 
   function exportExcel() {
@@ -72,7 +77,8 @@ export default function Reports() {
       Type: r.purchase_type, Supplier: r.supplier_name, Shop: r.shop_name,
       'Item Code': r.item_code, Item: r.item_name, Category: r.category_snapshot,
       Qty: r.qty, 'Purchase Rate': r.purchase_rate, 'Selling Rate': r.selling_rate,
-      'Purchase Value': r.alloc_purchase, 'Expected Sales': r.alloc_sales, 'Margin %': r.margin_pct
+      'Tax %': r.tax_rate,
+      'Purchase Value': r.line_value, 'Expected Sales': r.line_sales, 'Margin %': r.margin_pct
     })))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, sheet, 'Purchases')
@@ -104,6 +110,13 @@ export default function Reports() {
             {types.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
+        <label className="flex items-center gap-2 text-sm md:col-span-2">
+          <input type="checkbox" className="!w-auto" checked={includeDrafts}
+            onChange={e => setIncludeDrafts(e.target.checked)} />
+          <span className="normal-case tracking-normal text-ink">
+            Include drafts and orders awaiting approval
+          </span>
+        </label>
       </div>
 
       <div className="card grid grid-cols-2 divide-x divide-line">
@@ -130,7 +143,8 @@ export default function Reports() {
       {loading ? <div className="py-10 text-center text-sm text-slate2">Loading</div>
         : data.length === 0
           ? <div className="card p-8 text-center text-sm text-slate2">
-              No approved purchases in this period.
+              Nothing in this period. Orders appear here once approved — tick the
+              box above to include drafts and pending orders.
             </div>
           : <div className="card overflow-hidden">
               <table className="w-full text-[13px]">
