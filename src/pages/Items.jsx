@@ -12,6 +12,8 @@ export default function Items() {
   const [cat, setCat] = useState('')
   const [edit, setEdit] = useState(null)
   const [imp, setImp] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState(0)
 
   useEffect(() => { load() }, [])
   async function load() {
@@ -32,14 +34,15 @@ export default function Items() {
 
   function downloadTemplate() {
     const sample = [{
-      'Item Code': 'LAD-KUR-00001',
-      'Item Name': 'Ladies Kurti Cotton',
-      'Category': 'Ladies',
-      'Sub Category': 'Kurti',
-      'Model': 'K101',
-      'Fabric': 'Cotton',
+      'ITEM NAME': 'T- SHIRT 2 PC GIRLS',
+      'Unit': 'Nos',
+      'VAT': 5,
+      'DiviName': 'KIDS WEAR',
+      'HSN': '62061010',
+      'Sub Category': '',
+      'Model': '',
       'Brand': '',
-      'Selling Rate': 699
+      'Selling Rate': ''
     }]
     const ws = XLSX.utils.json_to_sheet(sample)
     ws['!cols'] = Object.keys(sample[0]).map(k => ({ wch: Math.max(k.length + 4, 16) }))
@@ -48,41 +51,105 @@ export default function Items() {
     XLSX.writeFile(wb, 'item-upload-format.xlsx')
   }
 
+  // Codes are generated from the division, because your billing export
+  // has no item code column: LAD-00001, HOU-00001, KID-00001 ...
+  function divisionPrefix(div) {
+    const d = String(div || 'GEN').toUpperCase()
+    if (d.startsWith('LADIES')) return 'LAD'
+    if (d.startsWith('GENTS'))  return 'GNT'
+    if (d.startsWith('KIDS'))   return 'KID'
+    if (d.startsWith('NEW BORN')) return 'NBN'
+    if (d.startsWith('HOUSE'))  return 'HSE'
+    if (d.startsWith('HOMEDEC')) return 'HDC'
+    if (d.startsWith('FOOT'))   return 'FTW'
+    if (d.startsWith('SCHOOL')) return 'SCH'
+    if (d.startsWith('PERFUME')) return 'PRF'
+    if (d.startsWith('SUNGLASS')) return 'SGL'
+    return d.replace(/[^A-Z]/g, '').slice(0, 3) || 'GEN'
+  }
+
   async function readFile(file) {
     const wb = XLSX.read(await file.arrayBuffer())
-    const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])
+    const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' })
+
+    const pick = (r, ...keys) => {
+      for (const k of keys) {
+        const hit = Object.keys(r).find(x => x.trim().toLowerCase() === k.toLowerCase())
+        if (hit && String(r[hit]).trim() !== '') return String(r[hit]).trim()
+      }
+      return ''
+    }
+
     const mapped = raw.map(r => ({
-      code:         String(r['Item Code'] || r.code || '').trim(),
-      name:         String(r['Item Name'] || r.name || '').trim(),
-      category:     String(r['Category'] || r.category || '').trim(),
-      sub_category: String(r['Sub Category'] || r.sub_category || '').trim(),
-      model_no:     String(r['Model'] || r['Model No'] || r.model_no || '').trim(),
-      fabric:       String(r['Fabric'] || r.fabric || '').trim(),
-      brand:        String(r['Brand'] || r.brand || '').trim(),
-      std_selling:  Number(r['Selling Rate'] || r.std_selling || 0) || null
-    }))
-    const codes = new Set(rows.map(i => i.code))
+      code:         pick(r, 'Item Code', 'code'),
+      name:         pick(r, 'ITEM NAME', 'Item Name', 'name'),
+      division:     pick(r, 'DiviName', 'Division', 'Category'),
+      category:     pick(r, 'DiviName', 'Category'),
+      sub_category: pick(r, 'Sub Category'),
+      unit:         pick(r, 'Unit') || 'Nos',
+      hsn:          pick(r, 'HSN', 'HSN Code'),
+      tax_rate:     Number(pick(r, 'VAT', 'GST', 'Tax', 'Tax %')) || null,
+      model_no:     pick(r, 'Model', 'Model No'),
+      fabric:       pick(r, 'Fabric'),
+      brand:        pick(r, 'Brand'),
+      std_selling:  Number(pick(r, 'Selling Rate', 'MRP')) || null
+    })).filter(m => m.name)
+
+    // Your export repeats the same name once per HSN code — "TOP LADIES"
+    // appears 120 times. Merging keeps one row per name+division and takes
+    // the most common HSN and tax rate for it.
+    const merged = []
+    const seen = new Map()
+    for (const m of mapped) {
+      const key = (m.name + '|' + m.division).toUpperCase()
+      if (seen.has(key)) { seen.get(key).variants++; continue }
+      const row = { ...m, variants: 1 }
+      seen.set(key, row); merged.push(row)
+    }
+
     setImp({
-      rows: mapped,
-      bad: mapped.filter(m => !m.code || !m.name),
-      dupes: mapped.filter(m => m.code && codes.has(m.code))
+      all: mapped,
+      merged,
+      mode: 'merge',
+      existingNames: new Set(rows.map(i => (i.name + '|' + (i.division || '')).toUpperCase()))
     })
   }
 
-  async function doImport(mode) {
-    const clean = imp.rows.filter(r => r.code && r.name)
-    const newOnes = clean.filter(r => !imp.dupes.includes(r))
-    let msg = ''
-    if (newOnes.length) {
-      const { error } = await db.from('items').insert(newOnes)
-      if (error) return alert(error.message)
-      msg += `${newOnes.length} new items added. `
+  async function doImport() {
+    const source = imp.mode === 'merge' ? imp.merged : imp.all
+    const fresh = source.filter(r =>
+      !imp.existingNames.has((r.name + '|' + r.division).toUpperCase()))
+
+    if (!fresh.length) { alert('Everything in this file is already in the item master.'); return }
+
+    // next serial per division, continuing from what is already saved
+    const serial = {}
+    rows.forEach(i => {
+      const m = /^([A-Z]+)-(\d+)$/.exec(i.code || '')
+      if (m) serial[m[1]] = Math.max(serial[m[1]] || 0, Number(m[2]))
+    })
+
+    const payload = fresh.map(r => {
+      const p = divisionPrefix(r.division)
+      serial[p] = (serial[p] || 0) + 1
+      const { variants, ...rest } = r
+      return {
+        ...rest,
+        code: r.code || `${p}-${String(serial[p]).padStart(5, '0')}`,
+        active: true
+      }
+    })
+
+    setBusy(true)
+    let done = 0
+    for (let i = 0; i < payload.length; i += 500) {
+      const { error } = await db.from('items').insert(payload.slice(i, i + 500))
+      if (error) { setBusy(false); return alert(`Stopped after ${done}: ${error.message}`) }
+      done += Math.min(500, payload.length - i)
+      setProgress(Math.round((done / payload.length) * 100))
     }
-    if (mode === 'update' && imp.dupes.length) {
-      for (const r of imp.dupes) await db.from('items').update(r).eq('code', r.code)
-      msg += `${imp.dupes.length} existing items updated.`
-    }
-    alert(msg || 'Nothing to import.')
+    setBusy(false); setProgress(0)
+    alert(`${done} items imported.`)
     setImp(null); load()
   }
 
@@ -109,26 +176,33 @@ export default function Items() {
 
       <details className="card p-3 text-[13px]">
         <summary className="cursor-pointer font-semibold">Excel upload format</summary>
-        <p className="mt-2 text-slate2">
-          Column headings must match exactly. <b>Item Code</b> and <b>Item Name</b>
-          are compulsory; the rest are optional.
-        </p>
+
+        <p className="mt-2 font-semibold">Your billing software export works as it is</p>
+        <p className="text-slate2">Export the item master and upload the file directly.</p>
         <div className="mt-2 overflow-x-auto">
           <table className="text-[11px]">
             <thead className="bg-paper">
-              <tr>{['Item Code','Item Name','Category','Sub Category','Model','Fabric','Brand','Selling Rate']
+              <tr>{['ITEM NAME','Unit','VAT','DiviName','HSN']
                 .map(h => <th key={h} className="whitespace-nowrap border border-line px-2 py-1">{h}</th>)}</tr>
             </thead>
             <tbody>
-              <tr>{['LAD-KUR-00001','Ladies Kurti Cotton','Ladies','Kurti','K101','Cotton','','699']
+              <tr>{['T- SHIRT 2 PC GIRLS','Nos','5','KIDS WEAR','62061010']
                 .map((c,i) => <td key={i} className="whitespace-nowrap border border-line px-2 py-1">{c}</td>)}</tr>
             </tbody>
           </table>
         </div>
         <p className="mt-2 text-slate2">
-          Item code format: CATEGORY-SUBCATEGORY-SERIAL, decided once and never changed.
-          Codes must be unique — a repeat code is treated as the same item.
+          <b>VAT</b> becomes the item's GST rate and fills in automatically on every
+          purchase order line. <b>DiviName</b> becomes the category.
+          Item codes are generated for you.
         </p>
+
+        <p className="mt-4 font-semibold">Optional extra columns</p>
+        <p className="text-slate2">
+          Add any of these and they will be picked up: Item Code, Sub Category,
+          Model, Fabric, Brand, Selling Rate.
+        </p>
+
         <button className="btn-ghost mt-3" onClick={downloadTemplate}>
           Download blank format
         </button>
@@ -163,21 +237,56 @@ export default function Items() {
       {rows.length > 300 && <p className="text-center text-xs text-slate2">Showing first 300 — use search.</p>}
 
       {imp && (
-        <Modal title="Check before importing" onClose={() => setImp(null)}>
-          <ul className="mb-4 space-y-1 text-sm">
-            <li>{imp.rows.length} rows read</li>
-            {imp.bad.length > 0 && <li className="text-bad">{imp.bad.length} rows missing code or name — skipped</li>}
-            {imp.dupes.length > 0 && <li className="text-gold">{imp.dupes.length} item codes already exist</li>}
-            <li className="font-semibold">{imp.rows.length - imp.bad.length - imp.dupes.length} new items</li>
+        <Modal title="Check before importing" onClose={() => !busy && setImp(null)}>
+          <ul className="mb-3 space-y-1 text-sm">
+            <li>{imp.all.length} rows read from the file</li>
+            <li>{imp.merged.length} different items by name and division</li>
+            <li className="text-slate2">
+              {imp.all.length - imp.merged.length} rows are the same item repeated
+              under a different HSN code
+            </li>
           </ul>
-          <div className="grid gap-2">
-            <button className="btn-dark" onClick={() => doImport('skip')}>Add new only, skip existing</button>
-            {imp.dupes.length > 0 &&
-              <button className="btn-ghost" onClick={() => doImport('update')}>Add new and update existing</button>}
+
+          <div className="mb-3 space-y-2">
+            <label className="flex items-start gap-2 text-sm">
+              <input type="radio" className="!w-auto mt-1" checked={imp.mode === 'merge'}
+                onChange={() => setImp(v => ({ ...v, mode: 'merge' }))} />
+              <span className="normal-case tracking-normal text-ink">
+                <b>Merge repeats — {imp.merged.length} items</b><br />
+                <span className="text-slate2">
+                  One entry per item name. Recommended: the buyer picks "TOP LADIES"
+                  once, not from 120 identical lines.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="radio" className="!w-auto mt-1" checked={imp.mode === 'all'}
+                onChange={() => setImp(v => ({ ...v, mode: 'all' }))} />
+              <span className="normal-case tracking-normal text-ink">
+                <b>Keep every row — {imp.all.length} items</b><br />
+                <span className="text-slate2">Exact copy of the billing master, HSN by HSN.</span>
+              </span>
+            </label>
           </div>
-          <p className="mt-3 text-xs text-slate2">
-            Expected columns: Item Code, Item Name, Category, Sub Category, Model, Fabric, Brand, Selling Rate.
+
+          <p className="mb-3 text-xs text-slate2">
+            Item codes are generated automatically from the division
+            (LAD-00001, HSE-00001) because your export has no code column.
+            Items already in the master are skipped.
           </p>
+
+          {busy && (
+            <div className="mb-3">
+              <div className="h-1.5 rounded-full bg-line">
+                <div className="h-1.5 rounded-full bg-ink" style={{ width: progress + '%' }} />
+              </div>
+              <div className="mt-1 text-center text-xs text-slate2">Importing {progress}%</div>
+            </div>
+          )}
+
+          <button className="btn-dark w-full" onClick={doImport} disabled={busy}>
+            {busy ? 'Importing' : `Import ${imp.mode === 'merge' ? imp.merged.length : imp.all.length} items`}
+          </button>
         </Modal>
       )}
 

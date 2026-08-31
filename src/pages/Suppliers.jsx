@@ -13,6 +13,8 @@ export default function Suppliers() {
   const [q, setQ] = useState('')
   const [edit, setEdit] = useState(null)
   const [imp, setImp] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState(0)
 
   useEffect(() => { load() }, [])
   async function load() {
@@ -34,16 +36,16 @@ export default function Suppliers() {
   /* ---------- blank template so nobody guesses the columns ---------- */
   function downloadTemplate() {
     const sample = [{
-      'Supplier Name': 'ABC Textiles',
-      'Company Name': 'ABC Textiles Pvt Ltd',
-      'GSTIN': '32ABCDE1234F1Z5',
-      'Contact Person': 'Rajesh',
-      'Mobile': '9000000001',
-      'WhatsApp': '9000000001',
-      'Email': 'abc@example.com',
-      'Address': 'Erode, Tamil Nadu',
-      'Credit Days': 30,
-      'Category': 'Ladies'
+      'SUPPLIER NAME': 'ABC Textiles',
+      'ADDRESS': 'No 8, Jaya Hanuman Complex',
+      'ADDRESS 2': '1st Cross Road',
+      'PLACE': 'BENGALURU',
+      'Phone': '9886641396',
+      'GSTIN': '',
+      'Contact Person': '',
+      'Email': '',
+      'Credit Days': '',
+      'Category': ''
     }]
     const ws = XLSX.utils.json_to_sheet(sample)
     ws['!cols'] = Object.keys(sample[0]).map(k => ({ wch: Math.max(k.length + 4, 16) }))
@@ -54,36 +56,77 @@ export default function Suppliers() {
 
   /* ---------- Excel import ---------- */
   async function readFile(file) {
-    const buf = await file.arrayBuffer()
-    const wb = XLSX.read(buf)
-    const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])
-    const mapped = raw.map(r => ({
-      code:           str(r['Supplier Code'] || r.code),
-      name:           str(r['Supplier Name'] || r.name),
-      company_name:   str(r['Company Name'] || r.company_name),
-      gstin:          str(r['GSTIN'] || r.gstin),
-      contact_person: str(r['Contact Person'] || r.contact_person),
-      mobile:         str(r['Mobile'] || r.mobile),
-      whatsapp:       str(r['WhatsApp'] || r.whatsapp || r['Mobile']),
-      email:          str(r['Email'] || r.email),
-      address:        str(r['Address'] || r.address),
-      credit_days:    Number(r['Credit Days'] || r.credit_days || 0),
-      category:       str(r['Category'] || r.category)
-    }))
+    const wb = XLSX.read(await file.arrayBuffer())
+    const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' })
+
+    const pick = (r, ...keys) => {
+      for (const k of keys) {
+        const hit = Object.keys(r).find(x => x.trim().toLowerCase() === k.toLowerCase())
+        if (hit && String(r[hit]).trim() !== '') return String(r[hit]).trim()
+      }
+      return ''
+    }
+    const phone = v => v.replace(/\D/g, '').slice(-10)
+
+    const mapped = raw.map(r => {
+      const mob = phone(pick(r, 'Phone', 'Mobile', 'Mobile No'))
+      return {
+        code:           pick(r, 'Supplier Code', 'code'),
+        name:           pick(r, 'SUPPLIER NAME', 'Supplier Name', 'name'),
+        company_name:   pick(r, 'Company Name'),
+        gstin:          pick(r, 'GSTIN'),
+        contact_person: pick(r, 'Contact Person'),
+        mobile:         mob,
+        whatsapp:       phone(pick(r, 'WhatsApp')) || mob,
+        email:          pick(r, 'Email'),
+        address:        pick(r, 'ADDRESS', 'Address'),
+        address2:       pick(r, 'ADDRESS 2', 'Address 2'),
+        place:          pick(r, 'PLACE', 'Place', 'City'),
+        credit_days:    Number(pick(r, 'Credit Days')) || 0,
+        category:       pick(r, 'Category')
+      }
+    }).filter(m => m.name)
+
+    // the export repeats some supplier names — keep the first of each
+    const seen = new Set()
+    const unique = []
+    let repeats = 0
+    for (const m of mapped) {
+      const k = m.name.toLowerCase()
+      if (seen.has(k)) { repeats++; continue }
+      seen.add(k); unique.push(m)
+    }
+
     const existing = new Set(rows.map(s => s.name.toLowerCase().trim()))
     setImp({
-      rows: mapped,
-      bad: mapped.filter(m => !m.name),
-      dupes: mapped.filter(m => m.name && existing.has(m.name.toLowerCase().trim()))
+      total: raw.length,
+      repeats,
+      fresh: unique.filter(m => !existing.has(m.name.toLowerCase())),
+      already: unique.filter(m => existing.has(m.name.toLowerCase())).length,
+      withPhone: unique.filter(m => m.mobile).length
     })
   }
 
   async function doImport() {
-    const good = imp.rows.filter(r => r.name && !imp.dupes.includes(r))
-      .map((r, i) => ({ ...r, code: r.code || 'SUP' + String(rows.length + i + 1).padStart(3, '0') }))
-    const { error } = await db.from('suppliers').insert(good)
-    if (error) return alert(error.message)
-    alert(`${good.length} suppliers imported.`)
+    let next = rows.reduce((mx, s) => {
+      const m = /^SUP(\d+)$/.exec(s.code || '')
+      return m ? Math.max(mx, Number(m[1])) : mx
+    }, 0)
+
+    const payload = imp.fresh.map(r => ({
+      ...r, code: r.code || 'SUP' + String(++next).padStart(4, '0'), active: true
+    }))
+
+    setBusy(true)
+    let done = 0
+    for (let i = 0; i < payload.length; i += 500) {
+      const { error } = await db.from('suppliers').insert(payload.slice(i, i + 500))
+      if (error) { setBusy(false); return alert(`Stopped after ${done}: ${error.message}`) }
+      done += Math.min(500, payload.length - i)
+      setProgress(Math.round((done / payload.length) * 100))
+    }
+    setBusy(false); setProgress(0)
+    alert(`${done} suppliers imported.`)
     setImp(null); load()
   }
 
@@ -109,26 +152,31 @@ export default function Suppliers() {
 
       <details className="card p-3 text-[13px]">
         <summary className="cursor-pointer font-semibold">Excel upload format</summary>
-        <p className="mt-2 text-slate2">
-          Column headings must match exactly. Only <b>Supplier Name</b> is compulsory —
-          leave the rest blank if you don't have them yet.
-        </p>
+
+        <p className="mt-2 font-semibold">Your billing software export works as it is</p>
         <div className="mt-2 overflow-x-auto">
           <table className="text-[11px]">
             <thead className="bg-paper">
-              <tr>{['Supplier Name','Company Name','GSTIN','Contact Person','Mobile','WhatsApp','Email','Address','Credit Days','Category']
+              <tr>{['SUPPLIER NAME','ADDRESS','ADDRESS 2','PLACE','Phone']
                 .map(h => <th key={h} className="whitespace-nowrap border border-line px-2 py-1">{h}</th>)}</tr>
             </thead>
             <tbody>
-              <tr>{['ABC Textiles','ABC Textiles Pvt Ltd','32ABCDE1234F1Z5','Rajesh','9000000001','9000000001','abc@example.com','Erode','30','Ladies']
+              <tr>{['A K FASHION','No 8, Jaya Hanuman','Bengaluru, 1st Cross','BENGALURU','9886641396']
                 .map((c,i) => <td key={i} className="whitespace-nowrap border border-line px-2 py-1">{c}</td>)}</tr>
             </tbody>
           </table>
         </div>
         <p className="mt-2 text-slate2">
-          WhatsApp numbers: 10 digits, no +91, no spaces. One row per supplier —
-          merge "ABC Textile" and "ABC Textiles" into one before uploading.
+          Only <b>SUPPLIER NAME</b> is compulsory. Phone numbers are cleaned to
+          10 digits automatically, and repeated names are imported once.
         </p>
+
+        <p className="mt-4 font-semibold">Optional extra columns</p>
+        <p className="text-slate2">
+          GSTIN, Contact Person, WhatsApp, Email, Credit Days, Category —
+          add these when you have them, or fill them in later on each supplier.
+        </p>
+
         <button className="btn-ghost mt-3" onClick={downloadTemplate}>
           Download blank format
         </button>
@@ -144,7 +192,7 @@ export default function Suppliers() {
                   {r.name} {!r.active && <span className="tag bg-line text-slate2">off</span>}
                 </div>
                 <div className="text-[11px] text-slate2">
-                  {[r.code, r.mobile, r.credit_days ? r.credit_days + 'd credit' : null]
+                  {[r.code, r.place, r.mobile, r.credit_days ? r.credit_days + 'd credit' : null]
                     .filter(Boolean).join(' · ')}
                 </div>
               </div>
@@ -157,20 +205,41 @@ export default function Suppliers() {
 
       {/* import preview */}
       {imp && (
-        <Modal title="Check before importing" onClose={() => setImp(null)}>
-          <ul className="mb-4 space-y-1 text-sm">
-            <li>{imp.rows.length} rows read</li>
-            {imp.bad.length > 0 && <li className="text-bad">{imp.bad.length} rows have no name — they will be skipped</li>}
-            {imp.dupes.length > 0 && <li className="text-gold">{imp.dupes.length} already exist by name — they will be skipped</li>}
-            <li className="font-semibold">
-              {imp.rows.length - imp.bad.length - imp.dupes.length} will be added
+        <Modal title="Check before importing" onClose={() => !busy && setImp(null)}>
+          <ul className="mb-3 space-y-1 text-sm">
+            <li>{imp.total} rows read from the file</li>
+            {imp.repeats > 0 && (
+              <li className="text-gold">{imp.repeats} repeated names — only the first of each is kept</li>
+            )}
+            {imp.already > 0 && (
+              <li className="text-slate2">{imp.already} already in your supplier master — skipped</li>
+            )}
+            <li className="font-semibold">{imp.fresh.length} suppliers will be added</li>
+            <li className="text-slate2">
+              {imp.withPhone} of them have a phone number
+              {imp.fresh.length > 0 &&
+                ` (${Math.round(imp.withPhone / imp.fresh.length * 100)}%)`}
             </li>
           </ul>
-          <button className="btn-dark w-full" onClick={doImport}>Import them</button>
-          <p className="mt-3 text-xs text-slate2">
-            Expected columns: Supplier Name, Company Name, GSTIN, Contact Person, Mobile,
-            WhatsApp, Email, Address, Credit Days, Category.
+
+          <p className="mb-3 text-xs text-slate2">
+            Supplier codes are generated automatically. Suppliers with no phone
+            number import fine — you can add numbers later, but the PO cannot be
+            sent on WhatsApp until one is filled in.
           </p>
+
+          {busy && (
+            <div className="mb-3">
+              <div className="h-1.5 rounded-full bg-line">
+                <div className="h-1.5 rounded-full bg-ink" style={{ width: progress + '%' }} />
+              </div>
+              <div className="mt-1 text-center text-xs text-slate2">Importing {progress}%</div>
+            </div>
+          )}
+
+          <button className="btn-dark w-full" onClick={doImport} disabled={busy}>
+            {busy ? 'Importing' : `Import ${imp.fresh.length} suppliers`}
+          </button>
         </Modal>
       )}
 
