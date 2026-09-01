@@ -1,0 +1,42 @@
+{
+  "_comment": "Copy this to config.json and fill in your real values. Never commit config.json to GitHub.",
+
+  "billing": {
+    "server": "localhost\\SQLEXPRESS",
+    "database": "BILLING_DB_NAME",
+    "username": "atlas_readonly",
+    "password": "the-password-you-set",
+    "trusted_connection": false,
+    "driver": "ODBC Driver 17 for SQL Server"
+  },
+
+  "supabase": {
+    "url": "https://YOURPROJECT.supabase.co",
+    "service_key": "PASTE-SERVICE-ROLE-KEY-HERE"
+  },
+
+  "items": {
+    "_comment": "Change the table and column names to match what discover.sql found",
+    "query": "select ItemCode, ItemName, DiviName, HSN, Unit, VAT, MRP from dbo.ItemMaster",
+    "code": "ItemCode",
+    "name": "ItemName",
+    "division": "DiviName",
+    "hsn": "HSN",
+    "unit": "Unit",
+    "tax": "VAT",
+    "selling": "MRP"
+  },
+
+  "suppliers": {
+    "query": "select SupCode, SupName, Address1, Address2, Place, Phone, GSTNo from dbo.SupplierMaster",
+    "code": "SupCode",
+    "name": "SupName",
+    "address": "Address1",
+    "address2": "Address2",
+    "place": "Place",
+    "phone": "Phone",
+    "whatsapp": "Phone",
+    "gstin": "GSTNo",
+    "email": null
+  }
+}

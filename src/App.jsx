@@ -13,6 +13,7 @@ import Users     from './pages/Users'
 import Compare   from './pages/Compare'
 import Reports   from './pages/Reports'
 import Settings  from './pages/Settings'
+import Insights  from './pages/Insights'
 
 const Ctx = createContext(null)
 export const useMe = () => useContext(Ctx)
@@ -74,6 +75,7 @@ export default function App() {
             <Route path="/orders/:id"  element={<PODetail />} />
             <Route path="/compare"     element={<Compare />} />
             <Route path="/reports"     element={<Reports />} />
+            <Route path="/insights"    element={<Insights />} />
             <Route path="/settings"    element={<Settings />} />
             <Route path="/suppliers"   element={<Suppliers />} />
             <Route path="/items"       element={<Items />} />
@@ -164,6 +166,8 @@ function navLinks(role) {
     { to: '/compare',   label: 'Compare',   short: 'Compare' },
     { to: '/reports',   label: 'Reports',   short: 'Reports' }
   ]
+  if (['manager', 'hod', 'admin'].includes(role))
+    base.push({ to: '/insights', label: 'Insights', short: 'Insights' })
   if (['hod', 'admin'].includes(role))
     base.push({ to: '/suppliers', label: 'Suppliers', short: 'Suppliers' },
               { to: '/items',     label: 'Items',     short: 'Items' })

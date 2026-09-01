@@ -10,16 +10,40 @@ const BLANK = {
 
 export default function Suppliers() {
   const [rows, setRows] = useState([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(0)
   const [q, setQ] = useState('')
+  const [term, setTerm] = useState('')
+  const [place, setPlace] = useState('')
+  const [places, setPlaces] = useState([])
+  const [loading, setLoading] = useState(false)
   const [edit, setEdit] = useState(null)
   const [imp, setImp] = useState(null)
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState(0)
 
-  useEffect(() => { load() }, [])
+  const PAGE = 50
+
+  useEffect(() => {
+    const t = setTimeout(() => { setTerm(q); setPage(0) }, 350)
+    return () => clearTimeout(t)
+  }, [q])
+
+  useEffect(() => { load() }, [term, place, page])
+
+  useEffect(() => {
+    db.from('v_supplier_places').select('*').limit(200)
+      .then(({ data }) => setPlaces(data || []))
+  }, [])
+
   async function load() {
-    const { data } = await db.from('suppliers').select('*').order('name')
-    setRows(data || [])
+    setLoading(true)
+    let sel = db.from('suppliers').select('*', { count: 'exact' })
+    if (term) sel = sel.or(`name.ilike.%${term}%,code.ilike.%${term}%,mobile.ilike.%${term}%`)
+    if (place) sel = sel.eq('place', place)
+    const { data, count } = await sel
+      .order('name').range(page * PAGE, page * PAGE + PAGE - 1)
+    setRows(data || []); setTotal(count || 0); setLoading(false)
   }
 
   async function save() {
@@ -130,8 +154,8 @@ export default function Suppliers() {
     setImp(null); load()
   }
 
-  const shown = q ? rows.filter(r =>
-    (r.name + r.code + (r.mobile || '')).toLowerCase().includes(q.toLowerCase())) : rows
+  const shown = rows
+  const pages = Math.ceil(total / PAGE)
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -148,7 +172,25 @@ export default function Suppliers() {
         </div>
       </div>
 
-      <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search suppliers" />
+      <div className="grid grid-cols-3 gap-2">
+        <input className="col-span-2" value={q} onChange={e => setQ(e.target.value)}
+               placeholder="Search name, code or phone" />
+        <select value={place} onChange={e => { setPlace(e.target.value); setPage(0) }}>
+          <option value="">All places</option>
+          {places.map(p => (
+            <option key={p.place} value={p.place}>{p.place} ({p.suppliers})</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex items-center justify-between text-[12px] text-slate2">
+        <span>
+          {loading ? 'Searching' :
+            total === 0 ? 'Nothing found' :
+            `${total.toLocaleString('en-IN')} suppliers${term ? ' matching “' + term + '”' : ''}`}
+        </span>
+        {pages > 1 && <span>Page {page + 1} of {pages}</span>}
+      </div>
 
       <details className="card p-3 text-[13px]">
         <summary className="cursor-pointer font-semibold">Excel upload format</summary>
@@ -200,8 +242,25 @@ export default function Suppliers() {
             </button>
           </li>
         ))}
-        {shown.length === 0 && <li className="p-8 text-center text-sm text-slate2">No suppliers yet.</li>}
+        {!loading && shown.length === 0 && (
+          <li className="p-8 text-center text-sm text-slate2">
+            No suppliers match. Try a shorter search.
+          </li>
+        )}
       </ul>
+
+      {pages > 1 && (
+        <div className="flex items-center justify-between gap-2">
+          <button className="btn-ghost" disabled={page === 0}
+            onClick={() => setPage(p => p - 1)}>Previous</button>
+          <span className="text-[12px] text-slate2">
+            {(page * PAGE + 1).toLocaleString('en-IN')}–
+            {Math.min((page + 1) * PAGE, total).toLocaleString('en-IN')}
+          </span>
+          <button className="btn-ghost" disabled={page + 1 >= pages}
+            onClick={() => setPage(p => p + 1)}>Next</button>
+        </div>
+      )}
 
       {/* import preview */}
       {imp && (

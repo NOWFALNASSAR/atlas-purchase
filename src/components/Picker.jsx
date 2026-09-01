@@ -6,16 +6,26 @@ import { useEffect, useState } from 'react'
  *
  * options: [{ id, label, sub }]
  */
-export default function Picker({ label, options, value, onChange, placeholder = 'Search', allowEmpty }) {
+export default function Picker({ label, options, value, onChange, placeholder = 'Search',
+                                 allowEmpty, onSearch, loading }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const chosen = options.find(o => o.id === value)
 
   useEffect(() => { if (!open) setQ('') }, [open])
 
-  const shown = q
-    ? options.filter(o => (o.label + ' ' + (o.sub || '')).toLowerCase().includes(q.toLowerCase())).slice(0, 60)
-    : options.slice(0, 60)
+  // when the list is too big to hold in the browser, ask the database
+  useEffect(() => {
+    if (!onSearch) return
+    const t = setTimeout(() => onSearch(q), 350)
+    return () => clearTimeout(t)
+  }, [q, onSearch])
+
+  const shown = onSearch
+    ? options.slice(0, 60)
+    : q
+      ? options.filter(o => (o.label + ' ' + (o.sub || '')).toLowerCase().includes(q.toLowerCase())).slice(0, 60)
+      : options.slice(0, 60)
 
   return (
     <div>
@@ -49,9 +59,12 @@ export default function Picker({ label, options, value, onChange, placeholder = 
                   </button>
                 </li>
               ))}
-              {shown.length === 0 && (
+              {loading && (
+                <li className="px-4 py-6 text-center text-sm text-slate2">Searching</li>
+              )}
+              {!loading && shown.length === 0 && (
                 <li className="px-4 py-6 text-center text-sm text-slate2">
-                  Nothing matches “{q}”. Ask the HOD to add it to the master.
+                  {q ? `Nothing matches “${q}”.` : 'Start typing to search.'}
                 </li>
               )}
             </ul>

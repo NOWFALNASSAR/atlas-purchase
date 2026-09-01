@@ -8,17 +8,42 @@ const BLANK = { code: '', name: '', category: '', sub_category: '', model_no: ''
 
 export default function Items() {
   const [rows, setRows] = useState([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(0)
   const [q, setQ] = useState('')
+  const [term, setTerm] = useState('')
   const [cat, setCat] = useState('')
+  const [cats, setCats] = useState([])
+  const [loading, setLoading] = useState(false)
   const [edit, setEdit] = useState(null)
   const [imp, setImp] = useState(null)
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState(0)
 
-  useEffect(() => { load() }, [])
+  const PAGE = 50
+
+  // wait for typing to stop before searching, so 69,000 rows aren't
+  // scanned on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => { setTerm(q); setPage(0) }, 350)
+    return () => clearTimeout(t)
+  }, [q])
+
+  useEffect(() => { load() }, [term, cat, page])
+
+  useEffect(() => {
+    db.from('v_item_divisions').select('*')
+      .then(({ data }) => setCats(data || []))
+  }, [])
+
   async function load() {
-    const { data } = await db.from('items').select('*').order('name').limit(2000)
-    setRows(data || [])
+    setLoading(true)
+    let sel = db.from('items').select('*', { count: 'exact' })
+    if (term) sel = sel.or(`name.ilike.%${term}%,code.ilike.%${term}%,model_no.ilike.%${term}%`)
+    if (cat) sel = sel.eq('division', cat)
+    const { data, count } = await sel
+      .order('name').range(page * PAGE, page * PAGE + PAGE - 1)
+    setRows(data || []); setTotal(count || 0); setLoading(false)
   }
 
   async function save() {
@@ -153,11 +178,8 @@ export default function Items() {
     setImp(null); load()
   }
 
-  const cats = [...new Set(rows.map(r => r.category).filter(Boolean))].sort()
-  const shown = rows.filter(r =>
-    (!cat || r.category === cat) &&
-    (!q || (r.name + r.code + (r.model_no || '')).toLowerCase().includes(q.toLowerCase()))
-  ).slice(0, 300)
+  const shown = rows
+  const pages = Math.ceil(total / PAGE)
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -211,10 +233,21 @@ export default function Items() {
       <div className="grid grid-cols-3 gap-2">
         <input className="col-span-2" value={q} onChange={e => setQ(e.target.value)}
                placeholder="Search name, code or model" />
-        <select value={cat} onChange={e => setCat(e.target.value)}>
-          <option value="">All categories</option>
-          {cats.map(c => <option key={c} value={c}>{c}</option>)}
+        <select value={cat} onChange={e => { setCat(e.target.value); setPage(0) }}>
+          <option value="">All divisions</option>
+          {cats.map(c => (
+            <option key={c.division} value={c.division}>{c.division} ({c.items})</option>
+          ))}
         </select>
+      </div>
+
+      <div className="flex items-center justify-between text-[12px] text-slate2">
+        <span>
+          {loading ? 'Searching' :
+            total === 0 ? 'Nothing found' :
+            `${total.toLocaleString('en-IN')} items${term ? ' matching “' + term + '”' : ''}`}
+        </span>
+        {pages > 1 && <span>Page {page + 1} of {pages.toLocaleString('en-IN')}</span>}
       </div>
 
       <ul className="card divide-y divide-line">
@@ -223,18 +256,40 @@ export default function Items() {
             <button className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-paper"
               onClick={() => setEdit(r)}>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold">{r.name}</div>
+                <div className="truncate text-sm font-semibold">
+                  {r.name} {!r.active && <span className="tag bg-line text-slate2">off</span>}
+                </div>
                 <div className="font-mono text-[11px] text-slate2">
-                  {[r.code, r.model_no, r.category].filter(Boolean).join(' · ')}
+                  {[r.code, r.division || r.category, r.hsn && 'HSN ' + r.hsn]
+                    .filter(Boolean).join(' · ')}
                 </div>
               </div>
-              {r.std_selling && <span className="text-sm font-semibold">{inr(r.std_selling)}</span>}
+              <div className="text-right">
+                {r.std_selling ? <div className="text-sm font-semibold">{inr(r.std_selling)}</div> : null}
+                {r.tax_rate ? <div className="text-[11px] text-slate2">{r.tax_rate}% tax</div> : null}
+              </div>
             </button>
           </li>
         ))}
-        {shown.length === 0 && <li className="p-8 text-center text-sm text-slate2">No items match.</li>}
+        {!loading && shown.length === 0 && (
+          <li className="p-8 text-center text-sm text-slate2">
+            No items match. Try a shorter search.
+          </li>
+        )}
       </ul>
-      {rows.length > 300 && <p className="text-center text-xs text-slate2">Showing first 300 — use search.</p>}
+
+      {pages > 1 && (
+        <div className="flex items-center justify-between gap-2">
+          <button className="btn-ghost" disabled={page === 0}
+            onClick={() => setPage(p => p - 1)}>Previous</button>
+          <span className="text-[12px] text-slate2">
+            {(page * PAGE + 1).toLocaleString('en-IN')}–
+            {Math.min((page + 1) * PAGE, total).toLocaleString('en-IN')}
+          </span>
+          <button className="btn-ghost" disabled={page + 1 >= pages}
+            onClick={() => setPage(p => p + 1)}>Next</button>
+        </div>
+      )}
 
       {imp && (
         <Modal title="Check before importing" onClose={() => !busy && setImp(null)}>
