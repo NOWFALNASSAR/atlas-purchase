@@ -13,10 +13,12 @@ export default function NewPO() {
   const [taxRates, setTaxRates] = useState([])
   const [transporters, setTransporters] = useState([])
   const [showDelivery, setShowDelivery] = useState(false)
+  const [shops, setShops] = useState([])
   const [locked, setLocked] = useState(null)      // the only entity this user may use
   const [f, setF] = useState({ entity_id: '', supplier_id: '', purchase_type: '',
                                expected_date: '', remarks: '', tax_rate: 5,
-                               delivery_address: '', transporter: '', transporter_phone: '', lr_no: '' })
+                               delivery_address: '', transporter: '', transporter_phone: '', lr_no: '',
+                               receipt_mode: 'godown', direct_shop_id: null })
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -58,15 +60,25 @@ export default function NewPO() {
     setF(v => ({ ...v, purchase_type: name }))
   }
 
+  useEffect(() => {
+    if (!f.entity_id) return
+    db.from('shops').select('*').eq('active', true).eq('entity_id', f.entity_id).order('code')
+      .then(({ data }) => setShops(data || []))
+  }, [f.entity_id])
+
   async function start() {
     if (!f.entity_id) return alert('Choose the entity')
     if (!f.supplier_id) return alert('Choose the supplier')
     if (!f.purchase_type) return alert('Choose the purchase type')
+    if (f.receipt_mode === 'direct_shop' && !f.direct_shop_id)
+      return alert('Choose which shop this goes to')
     setBusy(true)
     const { data, error } = await db.from('purchase_orders').insert({
       entity_id: f.entity_id,
       supplier_id: f.supplier_id,
       purchase_type: f.purchase_type,
+      receipt_mode: f.receipt_mode,
+      direct_shop_id: f.receipt_mode === 'direct_shop' ? f.direct_shop_id : null,
       tax_rate: Number(f.tax_rate) || 0,
       delivery_address: f.delivery_address || null,
       transporter: f.transporter || null,
@@ -124,6 +136,43 @@ export default function NewPO() {
             {canAddType && <option value="__new">+ Add a new type…</option>}
           </select>
         </div>
+        )}
+
+        {f.supplier_id && (
+        <div>
+          <label>Goods will arrive at</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button"
+              onClick={() => setF(v => ({ ...v, receipt_mode: 'godown', direct_shop_id: null }))}
+              className={'rounded-md border px-3 py-2 text-left text-sm ' +
+                (f.receipt_mode === 'godown'
+                  ? 'border-ink bg-ink text-white' : 'border-line bg-white')}>
+              <span className="block font-semibold">Godown</span>
+              <span className={'block text-[11px] ' +
+                (f.receipt_mode === 'godown' ? 'text-white/70' : 'text-slate2')}>
+                Send to shops later
+              </span>
+            </button>
+            <button type="button"
+              onClick={() => setF(v => ({ ...v, receipt_mode: 'direct_shop' }))}
+              className={'rounded-md border px-3 py-2 text-left text-sm ' +
+                (f.receipt_mode === 'direct_shop'
+                  ? 'border-ink bg-ink text-white' : 'border-line bg-white')}>
+              <span className="block font-semibold">Direct to shop</span>
+              <span className={'block text-[11px] ' +
+                (f.receipt_mode === 'direct_shop' ? 'text-white/70' : 'text-slate2')}>
+                Straight from supplier
+              </span>
+            </button>
+          </div>
+        </div>
+        )}
+
+        {f.supplier_id && f.receipt_mode === 'direct_shop' && (
+          <Picker label="Which shop" placeholder="Choose the shop"
+            options={shops.map(s => ({ id: s.id, label: s.name, sub: s.code }))}
+            value={f.direct_shop_id}
+            onChange={id => setF(v => ({ ...v, direct_shop_id: id }))} />
         )}
 
         {f.supplier_id && (

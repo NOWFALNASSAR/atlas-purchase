@@ -112,6 +112,9 @@ export default function PODetail() {
                   {po.purchase_type}
                 </span>
               )}
+              <span className="rounded bg-white/10 px-1.5 py-0.5">
+                {po.receipt_mode === 'direct_shop' ? 'Direct to shop' : 'Via godown'}
+              </span>
               <span>{po.profiles?.full_name}</span>
               <span>{dt(po.created_at)}</span>
             </div>
@@ -172,7 +175,7 @@ export default function PODetail() {
 
         {lines.map((l, i) => (
           <ItemEditor key={l.id || 'new-' + i}
-            line={l} index={i} items={items} shops={shops} editable={editable}
+            line={l} index={i} items={items} shops={shops} editable={editable} po={po}
             onSaved={row => { setLines(ls => ls.map((x, j) => (j === i ? row : x))); refresh() }}
             onDeleted={() => { setLines(ls => ls.filter((_, j) => j !== i)); refresh() }} />
         ))}
@@ -181,7 +184,14 @@ export default function PODetail() {
       {/* shop-wise summary */}
       {Object.keys(shopTotals).length > 0 && (
         <div className="card overflow-hidden">
-          <div className="px-4 py-3 text-sm font-bold">Shop-wise distribution</div>
+          <div className="flex items-center justify-between px-4 py-3">
+            <h2 className="text-sm font-bold">Shop-wise distribution</h2>
+            {po.receipt_mode === 'godown' && (
+              <a href="/godown" className="text-xs font-semibold text-gold underline">
+                Send more from godown
+              </a>
+            )}
+          </div>
           <table className="w-full text-[13px]">
             <thead className="bg-paper text-[11px] uppercase tracking-wider text-slate2">
               <tr>

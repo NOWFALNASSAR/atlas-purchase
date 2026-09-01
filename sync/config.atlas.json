@@ -1,23 +1,20 @@
 {
-  "_comment": "Atlas Maharani — real table and column names, from the discovery run. Copy to config.json and fill in the two passwords.",
-
   "billing": {
     "server": "localhost\\SQLEXPRESS",
     "database": "MAHA002_001",
     "username": "atlas_readonly",
-    "password": "PUT-THE-PASSWORD-HERE",
+    "password": "NOWFY50963",
     "trusted_connection": false,
     "driver": "ODBC Driver 17 for SQL Server"
   },
 
   "supabase": {
-    "url": "https://YOURPROJECT.supabase.co",
-    "service_key": "PUT-SERVICE-ROLE-KEY-HERE"
+    "url": "https://siphivgqpykanmcsfytx.supabase.co",
+    "service_key": "PASTE_YOUR_NEW_SERVICE_ROLE_KEY_HERE"
   },
 
   "items": {
-    "_comment": "STOCKMST001 is the item master. BLOCK=1 means blocked, so those are skipped. MODIDATE lets us sync only what changed.",
-    "query": "select itemcode, itemname, groupcode, subgroup, brand, company, DIVISION, HSNCODE, IGST, commonunit, Cprice, RPrice, Sprice, suppcode, MODIDATE from dbo.STOCKMST001 where itemname is not null and ltrim(rtrim(itemname)) <> '' and isnull(BLOCK,0) = 0",
+    "query": "select itemcode, itemname, groupcode, subgroup, brand, company, DIVISION, HSNCODE, IGST, commonunit, Cprice, RPrice, Sprice, suppcode, MODIDATE from dbo.STOCKMST001 where itemname is not null and isnull(BLOCK,0) = 0",
     "code": "itemcode",
     "name": "itemname",
     "division": "groupcode",
@@ -28,15 +25,15 @@
   },
 
   "suppliers": {
-    "_comment": "Suppliers are ledger accounts in the 170000 range — that is where every suppcode in PURCHASE001 falls. Confirm the column names before running.",
-    "query": "select acccode, accname, place, phone, gstno from dbo.ACCOUNTS001 where acccode between 170000 and 179999",
-    "code": "acccode",
-    "name": "accname",
-    "place": "place",
-    "phone": "phone",
-    "gstin": "gstno",
-    "address": null,
-    "address2": null,
-    "email": null
+    "query": "select CODE, HEAD, ADDRESS1, ADDRESS2, PHONE1, MOBILE, E_MAIL, GstNO, CRDAYS from dbo.ACCOUNTS001 where GROUPCODE = '170007' and isnull(BLOCK,0) = 0 and HEAD is not null",
+    "code": "CODE",
+    "name": "HEAD",
+    "address": "ADDRESS1",
+    "address2": "ADDRESS2",
+    "place": "ADDRESS1",
+    "phone": "MOBILE",
+    "whatsapp": "MOBILE",
+    "gstin": "GstNO",
+    "email": "E_MAIL"
   }
 }

@@ -5,7 +5,7 @@ import PhotoStrip from './PhotoStrip'
 import ShopSplit from './ShopSplit'
 
 /** One line of a purchase order. Quantity comes from the shop split. */
-export default function ItemEditor({ line, index, items, shops, onSaved, onDeleted, editable }) {
+export default function ItemEditor({ line, index, items, shops, onSaved, onDeleted, editable, po }) {
   const [f, setF] = useState(line)
   const [open, setOpen] = useState(!line.item_name)
   const [history, setHistory] = useState([])
@@ -163,9 +163,20 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
             </select></div>
         </div>
 
-        {f.id ? (
-          <ShopSplit poId={f.po_id} itemId={f.id} shops={shops} editable={editable}
-                     totalQty={Number(f.qty) || 0} onChange={setAllocQty} />
+        {po?.receipt_mode === 'direct_shop' ? (
+          <p className="rounded-md bg-paper px-3 py-2 text-xs text-slate2">
+            Direct purchase — all {f.qty || 0} pieces go straight to the shop.
+            Nothing goes through the godown.
+          </p>
+        ) : f.id ? (
+          <>
+            <ShopSplit poId={f.po_id} itemId={f.id} shops={shops} editable={editable}
+                       totalQty={Number(f.qty) || 0} onChange={setAllocQty} />
+            <p className="text-[11px] text-slate2">
+              Send only what you want to go out now. The rest waits in the godown
+              and can be sent any time from the Godown page.
+            </p>
+          </>
         ) : (
           <p className="text-xs text-slate2">Save the item first, then send stock to shops.</p>
         )}
