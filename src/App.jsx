@@ -15,6 +15,8 @@ import Reports   from './pages/Reports'
 import Settings  from './pages/Settings'
 import Insights  from './pages/Insights'
 import Godown    from './pages/Godown'
+import Transfers from './pages/Transfers'
+import Inventory from './pages/Inventory'
 
 const Ctx = createContext(null)
 export const useMe = () => useContext(Ctx)
@@ -78,6 +80,8 @@ export default function App() {
             <Route path="/reports"     element={<Reports />} />
             <Route path="/insights"    element={<Insights />} />
             <Route path="/godown"      element={<Godown />} />
+            <Route path="/transfers"   element={<Transfers />} />
+            <Route path="/inventory"   element={<Inventory />} />
             <Route path="/settings"    element={<Settings />} />
             <Route path="/suppliers"   element={<Suppliers />} />
             <Route path="/items"       element={<Items />} />
@@ -166,6 +170,8 @@ function navLinks(role) {
     { to: '/orders',    label: 'Orders',    short: 'Orders' },
     { to: '/orders/new',label: 'New order', short: 'New' },
     { to: '/godown',    label: 'Godown',    short: 'Godown' },
+    { to: '/inventory', label: 'Inventory', short: 'Stock' },
+    { to: '/transfers', label: 'Transfers', short: 'Transfers' },
     { to: '/compare',   label: 'Compare',   short: 'Compare' },
     { to: '/reports',   label: 'Reports',   short: 'Reports' }
   ]
