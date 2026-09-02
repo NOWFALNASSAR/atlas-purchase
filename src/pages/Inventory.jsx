@@ -50,16 +50,25 @@ export default function Inventory() {
     return q
   }
 
-  // Supabase returns at most 1000 rows per request, so totals built from
-  // one call were only ever counting the first page. Fetch in pages.
-  async function fetchAll(q, cap = 60000) {
+  // Supabase returns at most 1000 rows per request, so totals have to be
+  // built from several pages. Each page needs its OWN query object — the
+  // client mutates the builder, so reusing one returns overlapping rows
+  // and the totals come out several times too high.
+  async function fetchAll(cap = 60000) {
     const PAGE = 1000
-    let from = 0, all = []
+    let from = 0, all = [], seen = new Set()
     for (;;) {
-      const { data, error } = await q.range(from, from + PAGE - 1)
+      const { data, error } = await baseQuery()
+        .order('item_code', { ascending: true })
+        .range(from, from + PAGE - 1)
       if (error) { console.error(error); break }
-      all = all.concat(data || [])
-      if (!data || data.length < PAGE || all.length >= cap) break
+      const batch = data || []
+      // belt and braces: never count the same item twice
+      for (const r of batch) {
+        const k = r.item_code + '|' + r.location_code
+        if (!seen.has(k)) { seen.add(k); all.push(r) }
+      }
+      if (batch.length < PAGE || all.length >= cap) break
       from += PAGE
     }
     return all
@@ -67,7 +76,7 @@ export default function Inventory() {
 
   async function load() {
     setLoading(true); setItems(null)
-    const src = await fetchAll(baseQuery())
+    const src = await fetchAll()
 
     const map = {}
     src.forEach(r => {
@@ -108,7 +117,7 @@ export default function Inventory() {
   }
 
   async function exportExcel() {
-    const data = await fetchAll(baseQuery())
+    const data = await fetchAll()
     const sheet = XLSX.utils.json_to_sheet(data.map(r => ({
       'Item Code': r.item_code, Item: r.item_name,
       Division: r.division, Category: r.category, 'Sub Category': r.sub_category,
