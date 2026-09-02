@@ -50,10 +50,24 @@ export default function Inventory() {
     return q
   }
 
+  // Supabase returns at most 1000 rows per request, so totals built from
+  // one call were only ever counting the first page. Fetch in pages.
+  async function fetchAll(q, cap = 60000) {
+    const PAGE = 1000
+    let from = 0, all = []
+    for (;;) {
+      const { data, error } = await q.range(from, from + PAGE - 1)
+      if (error) { console.error(error); break }
+      all = all.concat(data || [])
+      if (!data || data.length < PAGE || all.length >= cap) break
+      from += PAGE
+    }
+    return all
+  }
+
   async function load() {
     setLoading(true); setItems(null)
-    const { data } = await baseQuery().limit(20000)
-    const src = data || []
+    const src = await fetchAll(baseQuery())
 
     const map = {}
     src.forEach(r => {
@@ -77,7 +91,8 @@ export default function Inventory() {
 
   async function showItems() {
     setLoading(true)
-    const { data } = await baseQuery().order('cost_value', { ascending: false }).limit(500)
+    const { data } = await baseQuery()
+      .order('cost_value', { ascending: false }).range(0, 499)
     setItems(data || []); setLoading(false)
   }
 
@@ -93,8 +108,8 @@ export default function Inventory() {
   }
 
   async function exportExcel() {
-    const { data } = await baseQuery().limit(20000)
-    const sheet = XLSX.utils.json_to_sheet((data || []).map(r => ({
+    const data = await fetchAll(baseQuery())
+    const sheet = XLSX.utils.json_to_sheet(data.map(r => ({
       'Item Code': r.item_code, Item: r.item_name,
       Division: r.division, Category: r.category, 'Sub Category': r.sub_category,
       Brand: r.brand, Colour: r.colour, Supplier: r.supplier_name,
