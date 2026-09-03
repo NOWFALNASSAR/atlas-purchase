@@ -346,15 +346,7 @@ function Rights({ edit, setEdit, groups, roles, rolePerms, allCodes }) {
           <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate2">
             {g.label}
           </div>
-          {failed && (
-        <div className="card border-bad/30 bg-bad/[.04] p-4 text-sm text-bad">
-          <div className="font-semibold">Could not load users</div>
-          <div className="mt-0.5">{failed}</div>
-          <button className="btn-ghost btn-sm mt-3" onClick={load}>Try again</button>
-        </div>
-      )}
-
-      <ul className="card divide-y divide-line">
+          <ul className="card divide-y divide-line">
             {g.perms.map(p => {
               const on = eff.has(p.code)
               const over = isOverride(edit, p.code)
