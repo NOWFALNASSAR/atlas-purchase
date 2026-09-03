@@ -22,6 +22,10 @@ import SalesBranches  from './pages/SalesBranches'
 import Salesmen       from './pages/Salesmen'
 import Targets        from './pages/Targets'
 import SalesImport    from './pages/SalesImport'
+import Tasks          from './pages/Tasks'
+import NewTask        from './pages/NewTask'
+import TaskDetail     from './pages/TaskDetail'
+import TaskReports    from './pages/TaskReports'
 
 const Ctx = createContext(null)
 export const useMe = () => useContext(Ctx)
@@ -66,6 +70,14 @@ const MODULES = [
     ]
   },
   {
+    key: 'tasks', label: 'Tasks', short: 'Tasks',
+    pages: [
+      { to: '/tasks',         label: 'Tasks',       short: 'Tasks' },
+      { to: '/tasks/new',     label: 'Raise task',  short: 'Raise' },
+      { to: '/tasks/reports', label: 'Performance', short: 'Reports' }
+    ]
+  },
+  {
     key: 'masters', label: 'Masters', short: 'Setup',
     roles: ['hod', 'admin'],
     pages: [
@@ -78,6 +90,7 @@ const MODULES = [
 ]
 
 const moduleFor = (path) => {
+  if (path.startsWith('/tasks')) return 'tasks'
   if (path.startsWith('/sales')) return 'sales'
   if (['/inventory', '/godown', '/transfers'].some(p => path.startsWith(p))) return 'stock'
   if (['/suppliers', '/items', '/users', '/settings'].some(p => path.startsWith(p))) return 'masters'
@@ -152,6 +165,11 @@ export default function App() {
             <Route path="/sales/salesmen"   element={<Salesmen />} />
             <Route path="/sales/targets"    element={<Targets />} />
             <Route path="/sales/import"     element={<SalesImport />} />
+
+            <Route path="/tasks"            element={<Tasks />} />
+            <Route path="/tasks/new"        element={<NewTask />} />
+            <Route path="/tasks/reports"    element={<TaskReports />} />
+            <Route path="/tasks/:id"        element={<TaskDetail />} />
 
             <Route path="/suppliers"        element={<Suppliers />} />
             <Route path="/items"            element={<Items />} />
