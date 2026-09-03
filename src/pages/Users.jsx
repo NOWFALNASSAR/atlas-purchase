@@ -51,7 +51,7 @@ export default function Users() {
     return rows.filter(u => {
       if (!showOff && !u.active) return false
       if (!t) return true
-      return [u.full_name, u.emp_code, u.phone, labelOf(u.role, roles)]
+      return [u.full_name, u.username, u.emp_code, u.phone, labelOf(u.role, roles)]
         .some(v => (v || '').toLowerCase().includes(t))
     })
   }, [rows, q, showOff, roles])
@@ -65,6 +65,7 @@ export default function Users() {
     setBusy(true)
     const { error } = await db.from('profiles').update({
       full_name:      edit.full_name,
+      username:       (edit.username || '').trim().toLowerCase() || null,
       emp_code:       edit.emp_code,
       phone:          edit.phone,
       role:           edit.role,
@@ -129,7 +130,7 @@ export default function Users() {
                     {!u.active && <span className="ml-2 tag bg-bad/10 text-bad">off</span>}
                   </div>
                   <div className="text-[11px] text-slate2">
-                    {labelOf(u.role, roles)}
+                    {u.username ? u.username + ' · ' : ''}{labelOf(u.role, roles)}
                     {u.approval_limit > 0 && ' · up to ' + inr(u.approval_limit)}
                     {isAdminRole(u.role, roles)
                       ? ' · full rights'
@@ -187,6 +188,15 @@ function Details({ edit, setEdit, entities, roles, toggleEntity, isSelf }) {
       <div>
         <label>Full name</label>
         <input value={edit.full_name || ''} onChange={e => set('full_name', e.target.value)} />
+      </div>
+
+      <div>
+        <label>Username</label>
+        <input value={edit.username || ''} autoCapitalize="none" autoCorrect="off"
+          onChange={e => set('username', e.target.value.replace(/\s+/g, ''))} />
+        <p className="mt-1 text-2xs text-slate2">
+          What they type to sign in. No spaces. Must not match anyone else.
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">

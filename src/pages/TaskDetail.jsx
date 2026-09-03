@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { db, dt, dtTime } from '../lib/db'
-import { useMe } from '../App'
+import { useMe, useCan } from '../App'
 import TaskMedia from '../components/TaskMedia'
 import Picker from '../components/Picker'
 
@@ -20,6 +20,7 @@ const STYLE = {
 export default function TaskDetail() {
   const { id } = useParams()
   const me = useMe()
+  const can = useCan()
 
   const [t, setT] = useState(null)
   const [events, setEvents] = useState([])
@@ -79,6 +80,12 @@ export default function TaskDetail() {
   const involved = holding || asking ||
                    (t.support_depts || []).length > 0       // supporting
   const open = !['verified', 'cancelled'].includes(t.status)
+
+  /* Editing, moving and cancelling a task belong to MD Office. Everyone
+     else raises an issue and MD Office decides. Keeps either side from
+     quietly making an awkward job disappear. */
+  const mayCancel   = can('tasks.cancel')   || isMD
+  const mayReassign = can('tasks.reassign') || isMD
 
   async function call(fn, args, ok) {
     setBusy(true)
@@ -310,7 +317,7 @@ export default function TaskDetail() {
       <div className="space-y-2">
 
         {/* MD Office settles a dispute */}
-        {isMD && t.status === 'disputed' && (
+        {mayReassign && t.status === 'disputed' && (
           assign ? (
             <div className="card space-y-3 p-4">
               <h3 className="text-sm font-semibold">Who should do this?</h3>
@@ -422,13 +429,25 @@ export default function TaskDetail() {
           </div>
         )}
 
-        {asking && open && (
-          <button className="btn-ghost w-full" disabled={busy}
+        {/* moving it on, outside of a dispute */}
+        {mayReassign && open && t.status !== 'disputed' && !assign && (
+          <button className="btn-ghost w-full"
+            onClick={() => setAssign({ dept: t.to_dept, note: '' })}>
+            Move to another department
+          </button>
+        )}
+
+        {mayCancel && open ? (
+          <button className="btn-ghost w-full text-bad" disabled={busy}
             onClick={() => {
               const why = prompt('Why cancel this task?')
               if (why?.trim()) call('cancel_task', { p_task: t.id, p_note: why })
             }}>
             Cancel task
+          </button>
+        ) : asking && open && t.status !== 'disputed' && (
+          <button className="btn-ghost w-full" disabled={busy} onClick={doDispute}>
+            Raise an issue with MD Office
           </button>
         )}
       </div>

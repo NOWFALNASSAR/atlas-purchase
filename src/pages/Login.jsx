@@ -3,21 +3,48 @@ import { db } from '../lib/db'
 
 export default function Login() {
   const [mode, setMode] = useState('in')      // 'in' | 'up'
+  const [login, setLogin] = useState('')      // username, or an email
   const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [pw, setPw] = useState('')
   const [name, setName] = useState('')
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  /* Supabase signs people in on an email address, and that has not
+     changed. What has changed is that a username can be typed instead:
+     we ask the database which email it belongs to, then sign in as
+     normal. An email typed directly still works. */
+  async function resolve(identifier) {
+    const id = identifier.trim()
+    if (id.includes('@')) return id
+    const { data, error } = await db.rpc('email_for_login', { p_login: id })
+    if (error || !data) return null
+    return data
+  }
+
   async function go(e) {
     e.preventDefault()
     setBusy(true); setMsg(''); setErr(false)
-    const { error } = mode === 'in'
-      ? await db.auth.signInWithPassword({ email, password: pw })
-      : await db.auth.signUp({ email, password: pw, options: { data: { full_name: name } } })
-    if (error) { setMsg(error.message); setErr(true) }
-    else if (mode === 'up') setMsg('Account created. Ask the admin to set your role, then sign in.')
+
+    if (mode === 'in') {
+      const addr = await resolve(login)
+      if (!addr) {
+        setMsg('No account with that username. Check the spelling, or use your email address.')
+        setErr(true); setBusy(false); return
+      }
+      const { error } = await db.auth.signInWithPassword({ email: addr, password: pw })
+      if (error) { setMsg(error.message); setErr(true) }
+    } else {
+      const { error } = await db.auth.signUp({
+        email, password: pw,
+        options: { data: { full_name: name, username: username.trim().toLowerCase() } }
+      })
+      if (error) { setMsg(error.message); setErr(true) }
+      else setMsg('Account created. Ask the admin to set your role, then sign in.')
+    }
+
     setBusy(false)
   }
 
@@ -56,24 +83,46 @@ export default function Login() {
           </h2>
           <p className="mb-6 mt-1 text-sm text-slate2">
             {mode === 'in'
-              ? 'Use the email your admin has on file.'
+              ? 'Your username, or the email your admin has on file.'
               : 'After signing up, your admin sets what you can see and do.'}
           </p>
 
           <form onSubmit={go} className="space-y-4">
             {mode === 'up' && (
-              <div>
-                <label>Full name</label>
-                <input value={name} onChange={e => setName(e.target.value)}
-                  required autoComplete="name" placeholder="As it should appear on orders" />
-              </div>
+              <>
+                <div>
+                  <label>Full name</label>
+                  <input value={name} onChange={e => setName(e.target.value)}
+                    required autoComplete="name" placeholder="As it should appear on orders" />
+                </div>
+                <div>
+                  <label>Username</label>
+                  <input value={username} autoCapitalize="none" autoCorrect="off"
+                    onChange={e => setUsername(e.target.value.replace(/\s+/g, ''))}
+                    required minLength={3} placeholder="nowfal" autoComplete="username" />
+                  <p className="mt-1 text-2xs text-slate2">
+                    This is what you will type to sign in. No spaces.
+                  </p>
+                </div>
+                <div>
+                  <label>Email</label>
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                    required inputMode="email" autoComplete="email" />
+                  <p className="mt-1 text-2xs text-slate2">
+                    Used to reset your password. You will not need it to sign in.
+                  </p>
+                </div>
+              </>
             )}
 
-            <div>
-              <label>Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                required autoComplete="username" inputMode="email" />
-            </div>
+            {mode === 'in' && (
+              <div>
+                <label>Username</label>
+                <input value={login} autoCapitalize="none" autoCorrect="off"
+                  onChange={e => setLogin(e.target.value)}
+                  required autoComplete="username" placeholder="nowfal" />
+              </div>
+            )}
 
             <div>
               <label>Password</label>
