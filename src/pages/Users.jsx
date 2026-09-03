@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { db, roleLabel, inr } from '../lib/db'
+import { db, inr } from '../lib/db'
 import { Modal } from './Suppliers'
 import {
-  ROLES, loadRights, groupByModule, effectivePerms,
+  loadRights, groupByModule, effectivePerms, isAdminRole, labelOf,
   toggleUserPerm, isOverride, overrideCount
 } from '../lib/perms'
 import { useMe } from '../App'
@@ -13,24 +13,34 @@ export default function Users() {
   const [entities, setEntities] = useState([])
   const [permissions, setPermissions] = useState([])
   const [rolePerms, setRolePerms] = useState({})
+  const [roles, setRoles] = useState([])
   const [q, setQ] = useState('')
   const [showOff, setShowOff] = useState(true)
   const [edit, setEdit] = useState(null)
   const [tab, setTab] = useState('details')
   const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(null)
 
   useEffect(() => { load() }, [])
 
   async function load() {
-    const [{ data: p }, { data: e }, rights] = await Promise.all([
-      db.from('profiles').select('*').order('full_name'),
-      db.from('entities').select('*').eq('active', true).order('code'),
-      loadRights()
-    ])
-    setRows(p || [])
-    setEntities(e || [])
-    setPermissions(rights.permissions)
-    setRolePerms(rights.rolePerms)
+    try {
+      const [{ data: p }, { data: e }, rights] = await Promise.all([
+        db.from('profiles').select('*').order('full_name'),
+        db.from('entities').select('*').eq('active', true).order('code'),
+        loadRights()
+      ])
+      setRows(p || [])
+      setEntities(e || [])
+      setPermissions(rights.permissions)
+      setRolePerms(rights.rolePerms)
+      setRoles(rights.roles)
+      setFailed(null)
+    } catch (err) {
+      // An empty list with no explanation is the worst outcome here —
+      // it looks like there are no users rather than like a failure.
+      setFailed(err?.message || 'Could not load users')
+    }
   }
 
   const allCodes = useMemo(() => permissions.map(p => p.code), [permissions])
@@ -41,10 +51,10 @@ export default function Users() {
     return rows.filter(u => {
       if (!showOff && !u.active) return false
       if (!t) return true
-      return [u.full_name, u.emp_code, u.phone, roleLabel(u.role)]
+      return [u.full_name, u.emp_code, u.phone, labelOf(u.role, roles)]
         .some(v => (v || '').toLowerCase().includes(t))
     })
-  }, [rows, q, showOff])
+  }, [rows, q, showOff, roles])
 
   function open(u) {
     setEdit({ ...u, perm_grant: u.perm_grant || [], perm_deny: u.perm_deny || [] })
@@ -60,8 +70,8 @@ export default function Users() {
       role:           edit.role,
       entity_ids:     edit.entity_ids || [],
       approval_limit: Number(edit.approval_limit) || 0,
-      perm_grant:     edit.role === 'admin' ? [] : (edit.perm_grant || []),
-      perm_deny:      edit.role === 'admin' ? [] : (edit.perm_deny || []),
+      perm_grant:     isAdminRole(edit.role, roles) ? [] : (edit.perm_grant || []),
+      perm_deny:      isAdminRole(edit.role, roles) ? [] : (edit.perm_deny || []),
       active:         edit.active
     }).eq('id', edit.id)
     setBusy(false)
@@ -96,9 +106,17 @@ export default function Users() {
         </button>
       </div>
 
+      {failed && (
+        <div className="card border-bad/30 bg-bad/[.04] p-4 text-sm text-bad">
+          <div className="font-semibold">Could not load users</div>
+          <div className="mt-0.5">{failed}</div>
+          <button className="btn-ghost btn-sm mt-3" onClick={load}>Try again</button>
+        </div>
+      )}
+
       <ul className="card divide-y divide-line">
         {visible.map(u => {
-          const eff = effectivePerms(u, rolePerms, allCodes)
+          const eff = effectivePerms(u, rolePerms, allCodes, roles)
           const over = overrideCount(u)
           return (
             <li key={u.id}>
@@ -111,9 +129,9 @@ export default function Users() {
                     {!u.active && <span className="ml-2 tag bg-bad/10 text-bad">off</span>}
                   </div>
                   <div className="text-[11px] text-slate2">
-                    {roleLabel(u.role)}
+                    {labelOf(u.role, roles)}
                     {u.approval_limit > 0 && ' · up to ' + inr(u.approval_limit)}
-                    {u.role === 'admin'
+                    {isAdminRole(u.role, roles)
                       ? ' · full rights'
                       : ` · ${eff.size} rights`}
                     {over > 0 && ` · ${over} custom`}
@@ -143,10 +161,10 @@ export default function Users() {
           </div>
 
           {tab === 'details' ? (
-            <Details edit={edit} setEdit={setEdit} entities={entities}
+            <Details edit={edit} setEdit={setEdit} entities={entities} roles={roles}
               toggleEntity={toggleEntity} isSelf={edit.id === me.id} />
           ) : (
-            <Rights edit={edit} setEdit={setEdit} groups={groups}
+            <Rights edit={edit} setEdit={setEdit} groups={groups} roles={roles}
               rolePerms={rolePerms} allCodes={allCodes} />
           )}
 
@@ -161,7 +179,7 @@ export default function Users() {
 
 /* ------------------------------------------------------------------ */
 
-function Details({ edit, setEdit, entities, toggleEntity, isSelf }) {
+function Details({ edit, setEdit, entities, roles, toggleEntity, isSelf }) {
   const set = (k, v) => setEdit(u => ({ ...u, [k]: v }))
 
   return (
@@ -185,7 +203,7 @@ function Details({ edit, setEdit, entities, toggleEntity, isSelf }) {
       <div>
         <label>Role</label>
         <select value={edit.role} onChange={e => set('role', e.target.value)}>
-          {ROLES.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
+          {roles.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}
         </select>
         <p className="mt-1 text-[11px] text-slate2">
           The role decides their rights. Change one person only on the Rights tab.
@@ -234,12 +252,12 @@ function Details({ edit, setEdit, entities, toggleEntity, isSelf }) {
 
 /* ------------------------------------------------------------------ */
 
-function Rights({ edit, setEdit, groups, rolePerms, allCodes }) {
-  const eff = effectivePerms(edit, rolePerms, allCodes)
-  const admin = edit.role === 'admin'
+function Rights({ edit, setEdit, groups, roles, rolePerms, allCodes }) {
+  const eff = effectivePerms(edit, rolePerms, allCodes, roles)
+  const admin = isAdminRole(edit.role, roles)
 
   function toggle(code) {
-    setEdit(u => toggleUserPerm(u, code, rolePerms))
+    setEdit(u => toggleUserPerm(u, code, rolePerms, roles))
   }
 
   function resetToRole() {
@@ -249,9 +267,9 @@ function Rights({ edit, setEdit, groups, rolePerms, allCodes }) {
   if (admin) {
     return (
       <p className="rounded-md bg-paper px-3 py-4 text-sm text-slate2">
-        Admin has every right, always. That cannot be edited — it is what stops
-        the system from locking everyone out. To limit this person, give them the
-        Purchase HOD role instead and adjust from there.
+        This role carries admin authority, so it holds every right and cannot be
+        edited. That is what stops the system from locking everyone out. To limit
+        this person, move them to a different role and adjust from there.
       </p>
     )
   }
@@ -262,7 +280,7 @@ function Rights({ edit, setEdit, groups, rolePerms, allCodes }) {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
         <p className="text-[12px] text-slate2">
-          Ticks come from the <strong>{roleLabel(edit.role)}</strong> role.
+          Ticks come from the <strong>{labelOf(edit.role, roles)}</strong> role.
           Change one here and it becomes a personal exception for this person only.
         </p>
         {custom > 0 && (
@@ -278,7 +296,15 @@ function Rights({ edit, setEdit, groups, rolePerms, allCodes }) {
           <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate2">
             {g.label}
           </div>
-          <ul className="card divide-y divide-line">
+          {failed && (
+        <div className="card border-bad/30 bg-bad/[.04] p-4 text-sm text-bad">
+          <div className="font-semibold">Could not load users</div>
+          <div className="mt-0.5">{failed}</div>
+          <button className="btn-ghost btn-sm mt-3" onClick={load}>Try again</button>
+        </div>
+      )}
+
+      <ul className="card divide-y divide-line">
             {g.perms.map(p => {
               const on = eff.has(p.code)
               const over = isOverride(edit, p.code)

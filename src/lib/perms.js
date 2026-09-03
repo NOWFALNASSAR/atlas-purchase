@@ -1,9 +1,9 @@
 import { db } from './db'
 
-/* The five roles. Admin is not editable — admin always has everything,
-   so that you can never lock yourself out of your own system. */
-export const ROLES = ['executive', 'manager', 'hod', 'accounts', 'admin']
-export const EDITABLE_ROLES = ['executive', 'manager', 'hod', 'accounts']
+/* Roles live in the database now, so they can be added without a code
+   change. Anything whose base_role is 'admin' always has every right and
+   cannot be edited — that is what stops you locking yourself out. */
+export const BASE_ROLES = ['executive', 'manager', 'hod', 'accounts', 'admin']
 
 export const MODULE_LABEL = {
   purchase: 'Purchase',
@@ -17,19 +17,37 @@ const MODULE_ORDER = ['purchase', 'stock', 'sales', 'tasks', 'masters']
 
 /* ---------- loading ------------------------------------------------ */
 
-/** The whole catalogue plus every role default, in one round trip. */
+/** The catalogue, every role, and every role default, in one round trip. */
 export async function loadRights() {
-  const [{ data: perms }, { data: rp }] = await Promise.all([
+  const [{ data: perms }, { data: rp }, { data: roleRows }] = await Promise.all([
     db.from('permissions').select('*').eq('active', true).order('sort_order'),
-    db.from('role_permissions').select('*')
+    db.from('role_permissions').select('*'),
+    db.from('roles').select('*').eq('active', true).order('sort_order')
   ])
 
+  // If 24_roles.sql has not been run, fall back to the original five so
+  // the screen still works instead of showing an empty list.
+  const roles = (roleRows || []).length ? roleRows : [
+    { code: 'admin',     label: 'Admin / MD',         base_role: 'admin',     built_in: true },
+    { code: 'hod',       label: 'Purchase HOD',       base_role: 'hod',       built_in: true },
+    { code: 'manager',   label: 'Purchase Manager',   base_role: 'manager',   built_in: true },
+    { code: 'executive', label: 'Purchase Executive', base_role: 'executive', built_in: true },
+    { code: 'accounts',  label: 'Accounts',           base_role: 'accounts',  built_in: true }
+  ]
+
   const byRole = {}
-  for (const r of EDITABLE_ROLES) byRole[r] = []
+  for (const r of roles) byRole[r.code] = []
   for (const row of rp || []) (byRole[row.role] ||= []).push(row.permission_code)
 
-  return { permissions: perms || [], rolePerms: byRole }
+  return { permissions: perms || [], rolePerms: byRole, roles }
 }
+
+/** Admin-authority roles hold every right and are not editable. */
+export const isAdminRole = (role, roles) =>
+  (roles.find(r => r.code === role)?.base_role || role) === 'admin'
+
+export const labelOf = (code, roles) =>
+  roles.find(r => r.code === code)?.label || code
 
 /** Group the flat catalogue into the modules the menu already uses. */
 export function groupByModule(permissions) {
@@ -43,8 +61,8 @@ export function groupByModule(permissions) {
 /* ---------- the one rule ------------------------------------------- */
 
 /** role defaults + personal grants − personal denies. Admin gets all. */
-export function effectivePerms(user, rolePerms, allCodes) {
-  if (user.role === 'admin') return new Set(allCodes)
+export function effectivePerms(user, rolePerms, allCodes, roles = []) {
+  if (isAdminRole(user.role, roles)) return new Set(allCodes)
   const grant = user.perm_grant || []
   const deny = new Set(user.perm_deny || [])
   const out = new Set()
@@ -56,8 +74,8 @@ export function effectivePerms(user, rolePerms, allCodes) {
 /** Turn one permission on or off for one person, keeping the arrays tidy.
  *  If the new value matches the role default we drop the override entirely,
  *  so the person keeps following their role when you later change the role. */
-export function toggleUserPerm(user, code, rolePerms) {
-  if (user.role === 'admin') return user
+export function toggleUserPerm(user, code, rolePerms, roles = []) {
+  if (isAdminRole(user.role, roles)) return user
 
   const roleHas = (rolePerms[user.role] || []).includes(code)
   const grant = new Set(user.perm_grant || [])
