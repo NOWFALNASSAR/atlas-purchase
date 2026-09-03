@@ -10,6 +10,7 @@ import PODetail  from './pages/PODetail'
 import Suppliers from './pages/Suppliers'
 import Items     from './pages/Items'
 import Users     from './pages/Users'
+import Roles     from './pages/Roles'
 import Compare   from './pages/Compare'
 import Reports   from './pages/Reports'
 import Settings  from './pages/Settings'
@@ -33,6 +34,11 @@ export const useMe = () => useContext(Ctx)
 const EntityCtx = createContext(null)
 export const useEntity = () => useContext(EntityCtx)
 
+/* Rights come from the database, never from the browser. The menu below
+   uses them to decide what to draw; RLS decides what is actually allowed. */
+const PermCtx = createContext(() => false)
+export const useCan = () => useContext(PermCtx)
+
 /* ------------------------------------------------------------------ */
 /* MODULES                                                             */
 /* Each module is a separate area of the business with its own pages.  */
@@ -42,49 +48,48 @@ const MODULES = [
   {
     key: 'purchase', label: 'Purchase', short: 'Buy',
     pages: [
-      { to: '/',            label: 'Dashboard',      short: 'Home', end: true },
-      { to: '/orders',      label: 'Purchase orders', short: 'Orders' },
-      { to: '/orders/new',  label: 'New order',       short: 'New' },
-      { to: '/compare',     label: 'Rate compare',    short: 'Rates' },
-      { to: '/reports',     label: 'Order reports',   short: 'Reports' },
-      { to: '/insights',    label: 'Insights',        short: 'Insights', roles: ['manager','hod','admin'] }
+      { to: '/',            label: 'Dashboard',       short: 'Home', end: true },
+      { to: '/orders',      label: 'Purchase orders', short: 'Orders',   perm: 'po.view' },
+      { to: '/orders/new',  label: 'New order',       short: 'New',      perm: 'po.create' },
+      { to: '/compare',     label: 'Rate compare',    short: 'Rates',    perm: 'compare.view' },
+      { to: '/reports',     label: 'Order reports',   short: 'Reports',  perm: 'reports.view' },
+      { to: '/insights',    label: 'Insights',        short: 'Insights', perm: 'insights.view' }
     ]
   },
   {
     key: 'stock', label: 'Stock', short: 'Stock',
     pages: [
-      { to: '/inventory',  label: 'Inventory',    short: 'Stock' },
-      { to: '/godown',     label: 'Godown',       short: 'Godown' },
-      { to: '/transfers',  label: 'Transfers',    short: 'Transfers' }
+      { to: '/inventory',  label: 'Inventory', short: 'Stock',     perm: 'inventory.view' },
+      { to: '/godown',     label: 'Godown',    short: 'Godown',    perm: 'godown.view' },
+      { to: '/transfers',  label: 'Transfers', short: 'Transfers', perm: 'transfers.view' }
     ]
   },
   {
     key: 'sales', label: 'Sales', short: 'Sales',
     pages: [
-      { to: '/sales',           label: 'Sales dashboard', short: 'Sales' },
-      { to: '/sales/branches',  label: 'Branches',        short: 'Branches' },
-      { to: '/sales/salesmen',  label: 'Salesmen',        short: 'Team' },
-      { to: '/sales/targets',   label: 'Targets',         short: 'Targets' },
-      { to: '/sales/import',    label: 'Upload sales',    short: 'Upload',
-        roles: ['manager','hod','admin'] }
+      { to: '/sales',           label: 'Sales dashboard', short: 'Sales',    perm: 'sales.view' },
+      { to: '/sales/branches',  label: 'Branches',        short: 'Branches', perm: 'sales.branches' },
+      { to: '/sales/salesmen',  label: 'Salesmen',        short: 'Team',     perm: 'sales.salesmen' },
+      { to: '/sales/targets',   label: 'Targets',         short: 'Targets',  perm: 'sales.targets.view' },
+      { to: '/sales/import',    label: 'Upload sales',    short: 'Upload',   perm: 'sales.import' }
     ]
   },
   {
     key: 'tasks', label: 'Tasks', short: 'Tasks',
     pages: [
-      { to: '/tasks',         label: 'Tasks',       short: 'Tasks' },
-      { to: '/tasks/new',     label: 'Raise task',  short: 'Raise' },
-      { to: '/tasks/reports', label: 'Performance', short: 'Reports' }
+      { to: '/tasks',         label: 'Tasks',       short: 'Tasks',   perm: 'tasks.view' },
+      { to: '/tasks/new',     label: 'Raise task',  short: 'Raise',   perm: 'tasks.create' },
+      { to: '/tasks/reports', label: 'Performance', short: 'Reports', perm: 'tasks.reports' }
     ]
   },
   {
     key: 'masters', label: 'Masters', short: 'Setup',
-    roles: ['hod', 'admin'],
     pages: [
-      { to: '/suppliers', label: 'Suppliers', short: 'Suppliers' },
-      { to: '/items',     label: 'Items',     short: 'Items' },
-      { to: '/users',     label: 'Users',     short: 'Users',    roles: ['admin'] },
-      { to: '/settings',  label: 'Settings',  short: 'Settings', roles: ['admin'] }
+      { to: '/suppliers', label: 'Suppliers', short: 'Suppliers', perm: 'suppliers.view' },
+      { to: '/items',     label: 'Items',     short: 'Items',     perm: 'items.view' },
+      { to: '/users',     label: 'Users',     short: 'Users',     perm: 'users.manage' },
+      { to: '/roles',     label: 'Roles',     short: 'Roles',     perm: 'roles.manage' },
+      { to: '/settings',  label: 'Settings',  short: 'Settings',  perm: 'settings.manage' }
     ]
   }
 ]
@@ -93,11 +98,15 @@ const moduleFor = (path) => {
   if (path.startsWith('/tasks')) return 'tasks'
   if (path.startsWith('/sales')) return 'sales'
   if (['/inventory', '/godown', '/transfers'].some(p => path.startsWith(p))) return 'stock'
-  if (['/suppliers', '/items', '/users', '/settings'].some(p => path.startsWith(p))) return 'masters'
+  if (['/suppliers', '/items', '/users', '/roles', '/settings'].some(p => path.startsWith(p))) return 'masters'
   return 'purchase'
 }
 
-const allowed = (item, role) => !item.roles || item.roles.includes(role)
+/* A page with no perm is open to every signed-in user (the dashboard).
+   A module is shown only if at least one of its pages is. */
+const allowed = (page, can) => !page.perm || can(page.perm)
+const moduleAllowed = (mod, can) => mod.pages.some(p => allowed(p, can))
+const visiblePages = (mod, can) => (mod?.pages || []).filter(p => allowed(p, can))
 
 /* ------------------------------------------------------------------ */
 
@@ -106,6 +115,7 @@ export default function App() {
   const [me, setMe] = useState(null)
   const [entities, setEntities] = useState([])
   const [entityId, setEntityId] = useState('mixed')
+  const [perms, setPerms] = useState(null)
 
   useEffect(() => {
     db.auth.getSession().then(({ data }) => setSession(data.session))
@@ -118,6 +128,16 @@ export default function App() {
     db.from('profiles').select('*').eq('id', session.user.id).single()
       .then(({ data }) => setMe({ ...data, email: session.user.email }))
   }, [session])
+
+  useEffect(() => {
+    if (!me) { setPerms(null); return }
+    db.rpc('my_permissions').then(({ data, error }) => {
+      // If the rights migration has not been run yet, fall back to the old
+      // behaviour rather than showing an empty app.
+      setPerms(error ? null : (data || []))
+      if (error) console.warn('Rights not installed yet — run supabase/19_permissions.sql')
+    })
+  }, [me])
 
   useEffect(() => {
     if (!me) return
@@ -141,48 +161,91 @@ export default function App() {
   if (!me) return <Splash text="Opening your account" />
   if (!me.active) return <Splash text="Your login is switched off. Ask the admin to activate it." />
 
+  const can = makeCan(me, perms)
+
   return (
     <Ctx.Provider value={me}>
+     <PermCtx.Provider value={can}>
      <EntityCtx.Provider value={{ entities, entityId, setEntityId: chooseEntity }}>
       <div className="min-h-screen pb-24 md:pb-0">
-        <TopBar me={me} />
+        <TopBar me={me} can={can} />
         <main className="mx-auto max-w-6xl px-4 py-5">
           <Routes>
             <Route path="/"                 element={<Dashboard />} />
-            <Route path="/orders"           element={<POList />} />
-            <Route path="/orders/new"       element={<NewPO />} />
-            <Route path="/orders/:id"       element={<PODetail />} />
-            <Route path="/compare"          element={<Compare />} />
-            <Route path="/reports"          element={<Reports />} />
-            <Route path="/insights"         element={<Insights />} />
+            <Route path="/orders"           element={<Need p="po.view"><POList /></Need>} />
+            <Route path="/orders/new"       element={<Need p="po.create"><NewPO /></Need>} />
+            <Route path="/orders/:id"       element={<Need p="po.view"><PODetail /></Need>} />
+            <Route path="/compare"          element={<Need p="compare.view"><Compare /></Need>} />
+            <Route path="/reports"          element={<Need p="reports.view"><Reports /></Need>} />
+            <Route path="/insights"         element={<Need p="insights.view"><Insights /></Need>} />
 
-            <Route path="/inventory"        element={<Inventory />} />
-            <Route path="/godown"           element={<Godown />} />
-            <Route path="/transfers"        element={<Transfers />} />
+            <Route path="/inventory"        element={<Need p="inventory.view"><Inventory /></Need>} />
+            <Route path="/godown"           element={<Need p="godown.view"><Godown /></Need>} />
+            <Route path="/transfers"        element={<Need p="transfers.view"><Transfers /></Need>} />
 
-            <Route path="/sales"            element={<SalesDashboard />} />
-            <Route path="/sales/branches"   element={<SalesBranches />} />
-            <Route path="/sales/salesmen"   element={<Salesmen />} />
-            <Route path="/sales/targets"    element={<Targets />} />
-            <Route path="/sales/import"     element={<SalesImport />} />
+            <Route path="/sales"            element={<Need p="sales.view"><SalesDashboard /></Need>} />
+            <Route path="/sales/branches"   element={<Need p="sales.branches"><SalesBranches /></Need>} />
+            <Route path="/sales/salesmen"   element={<Need p="sales.salesmen"><Salesmen /></Need>} />
+            <Route path="/sales/targets"    element={<Need p="sales.targets.view"><Targets /></Need>} />
+            <Route path="/sales/import"     element={<Need p="sales.import"><SalesImport /></Need>} />
 
-            <Route path="/tasks"            element={<Tasks />} />
-            <Route path="/tasks/new"        element={<NewTask />} />
-            <Route path="/tasks/reports"    element={<TaskReports />} />
-            <Route path="/tasks/:id"        element={<TaskDetail />} />
+            <Route path="/tasks"            element={<Need p="tasks.view"><Tasks /></Need>} />
+            <Route path="/tasks/new"        element={<Need p="tasks.create"><NewTask /></Need>} />
+            <Route path="/tasks/reports"    element={<Need p="tasks.reports"><TaskReports /></Need>} />
+            <Route path="/tasks/:id"        element={<Need p="tasks.view"><TaskDetail /></Need>} />
 
-            <Route path="/suppliers"        element={<Suppliers />} />
-            <Route path="/items"            element={<Items />} />
-            <Route path="/users"            element={<Users />} />
-            <Route path="/settings"         element={<Settings />} />
+            <Route path="/suppliers"        element={<Need p="suppliers.view"><Suppliers /></Need>} />
+            <Route path="/items"            element={<Need p="items.view"><Items /></Need>} />
+            <Route path="/users"            element={<Need p="users.manage"><Users /></Need>} />
+            <Route path="/roles"            element={<Need p="roles.manage"><Roles /></Need>} />
+            <Route path="/settings"         element={<Need p="settings.manage"><Settings /></Need>} />
             <Route path="*"                 element={<Navigate to="/" />} />
           </Routes>
         </main>
-        <BottomNav me={me} />
+        <BottomNav me={me} can={can} />
       </div>
      </EntityCtx.Provider>
+     </PermCtx.Provider>
     </Ctx.Provider>
   )
+}
+
+/* Typing a URL should not get you into a page your rights do not cover.
+   This is politeness, not security — RLS is the security. */
+function Need({ p, children }) {
+  const can = useCan()
+  if (can(p)) return children
+  return (
+    <div className="mx-auto max-w-md py-16 text-center">
+      <div className="mb-2 text-base font-bold">Not available to you</div>
+      <p className="text-sm text-slate2">
+        Your rights do not include this page. Ask the admin to switch it on
+        under Masters → Users.
+      </p>
+    </div>
+  )
+}
+
+/* Rights come from the database. If the migration has not been run yet the
+   RPC fails, and we fall back to the role rules the app shipped with, so an
+   un-migrated database still works instead of showing an empty menu. */
+const LEGACY = {
+  'insights.view':     ['manager', 'hod', 'admin'],
+  'sales.import':      ['manager', 'hod', 'admin'],
+  'suppliers.view':    ['hod', 'admin'],
+  'suppliers.edit':    ['hod', 'admin'],
+  'items.view':        ['hod', 'admin'],
+  'items.edit':        ['hod', 'admin'],
+  'users.manage':      ['admin'],
+  'roles.manage':      ['admin'],
+  'settings.manage':   ['admin']
+}
+
+function makeCan(me, perms) {
+  if (perms === null) {
+    return code => (LEGACY[code] ? LEGACY[code].includes(me.role) : true)
+  }
+  return code => perms.includes(code)
 }
 
 function Splash({ text }) {
@@ -196,15 +259,14 @@ function Splash({ text }) {
   )
 }
 
-function TopBar({ me }) {
+function TopBar({ me, can }) {
   const nav = useNavigate()
   const { pathname } = useLocation()
   const [open, setOpen] = useState(false)
 
-  const mods = MODULES.filter(m => allowed(m, me.role))
+  const mods = MODULES.filter(m => moduleAllowed(m, can))
   const current = moduleFor(pathname)
-  const pages = (mods.find(m => m.key === current)?.pages || [])
-    .filter(p => allowed(p, me.role))
+  const pages = visiblePages(mods.find(m => m.key === current), can)
 
   return (
     <header className="sticky top-0 z-20 bg-ink text-white">
@@ -214,7 +276,7 @@ function TopBar({ me }) {
           <NavLink to="/" className="mr-3 text-base font-bold tracking-tight">Atlas</NavLink>
 
           {mods.map(m => (
-            <NavLink key={m.key} to={m.pages[0].to}
+            <NavLink key={m.key} to={visiblePages(m, can)[0].to}
               className={'rounded-md px-3 py-1.5 text-sm font-semibold ' +
                 (current === m.key ? 'bg-white text-ink' : 'text-white/60 hover:text-white')}>
               {m.label}
@@ -256,11 +318,10 @@ function TopBar({ me }) {
   )
 }
 
-function BottomNav({ me }) {
+function BottomNav({ me, can }) {
   const { pathname } = useLocation()
   const current = moduleFor(pathname)
-  const pages = (MODULES.find(m => m.key === current)?.pages || [])
-    .filter(p => allowed(p, me.role)).slice(0, 5)
+  const pages = visiblePages(MODULES.find(m => m.key === current), can).slice(0, 5)
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t border-line bg-white md:hidden">
