@@ -1,0 +1,22 @@
+{
+  "branch_code": "GODOWN",
+  "branch_name": "Head Office Godown",
+  "location_code": "001",
+  "purchases_from": "2026-04-01",
+
+  "billing": {
+    "server": "DBSERVER-ATLAS",
+    "database": "PUT_TRANSACTION_DB_NAME_HERE",
+    "username": "atlas_readonly",
+    "password": "NOWFY50963",
+    "trusted_connection": false,
+    "driver": "ODBC Driver 17 for SQL Server"
+  },
+
+  "masters_db": "Aiy_GBS_Tex",
+
+  "supabase": {
+    "url": "https://siphivgqpykanmcsfytx.supabase.co",
+    "service_key": "PASTE_YOUR_SERVICE_ROLE_KEY_HERE"
+  }
+}

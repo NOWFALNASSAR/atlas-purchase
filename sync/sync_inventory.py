@@ -168,7 +168,8 @@ def save_state(c, branch_id, stream, wm, n, status, msg=""):
 
 # avlQty is stock actually on hand. The plain qty column carries
 # movements and goes negative, which is why it totalled wrongly.
-# ACTUALCOST is purchase plus tax — it matches the billing stock report.
+# ACTUALCOST holds landed cost but is blank on 98% of items, so cost is
+# computed as purchase rate plus GST, which is how you define it.
 STOCK_SQL = """
 select
   ltrim(rtrim(s.itemcode)) as item_code, ltrim(rtrim(s.itemname)) as item_name,
@@ -180,7 +181,9 @@ select
   s.suppcode as supplier_code, a.HEAD as supplier_name,
   s.avlQty          as qty,
   s.Purchprice      as purchase_rate,
-  s.ACTUALCOST      as cost_rate,
+  case when isnull(s.ACTUALCOST,0) > 0 then s.ACTUALCOST
+       else round(isnull(s.Purchprice,0) * (1 + isnull(s.IGST,0)/100.0), 2)
+  end               as cost_rate,
   s.RPrice          as selling_rate,
   p.first_purchase, p.last_purchase
 from dbo.STOCKMST001 s
