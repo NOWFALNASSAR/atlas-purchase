@@ -203,7 +203,7 @@ function PurchaseSection({ me, entityId, can }) {
   }, [entityId, me.id])
 
   return (
-    <Section title="Purchase" to="/orders" toLabel="All orders" loading={state.loading}>
+    <Section title="Purchase" to="/purchase" toLabel="Purchase dashboard" loading={state.loading}>
       {() => state.error ? <Broken what="orders" /> : (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -477,7 +477,7 @@ function TasksSection() {
   }, [])
 
   return (
-    <Section title="Tasks" to="/tasks" toLabel="All tasks" loading={state.loading}>
+    <Section title="Tasks" to="/tasks/reports" toLabel="Task reports" loading={state.loading}>
       {() => state.error ? <Broken what="tasks" /> : (
         <div className="space-y-3">
           <div className="grid grid-cols-3 gap-3">

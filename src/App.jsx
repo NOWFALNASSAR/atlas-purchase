@@ -1,9 +1,11 @@
 import { useEffect, useState, createContext, useContext, Component } from 'react'
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { db, roleLabel } from './lib/db'
+import NotificationBell from './components/NotificationBell'
 
 import Login     from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import PurchaseDashboard from './pages/PurchaseDashboard'
 import POList    from './pages/POList'
 import NewPO     from './pages/NewPO'
 import PODetail  from './pages/PODetail'
@@ -82,6 +84,7 @@ const MODULES = [
   {
     key: 'purchase', label: 'Purchase', short: 'Buy',
     pages: [
+      { to: '/purchase',    label: 'Purchase dashboard', short: 'Buy',   perm: 'po.view' },
       { to: '/orders',      label: 'Purchase orders', short: 'Orders',   perm: 'po.view' },
       { to: '/orders/new',  label: 'New order',       short: 'New',      perm: 'po.create' },
       { to: '/compare',     label: 'Rate compare',    short: 'Rates',    perm: 'compare.view' },
@@ -131,6 +134,7 @@ const MODULES = [
 const moduleFor = (path) => {
   if (path === '/') return 'home'
   if (path.startsWith('/tasks')) return 'tasks'
+  if (path.startsWith('/purchase')) return 'purchase'
   if (path.startsWith('/sales')) return 'sales'
   if (['/inventory', '/godown', '/transfers'].some(p => path.startsWith(p))) return 'stock'
   if (['/suppliers', '/items', '/users', '/roles', '/settings'].some(p => path.startsWith(p))) return 'masters'
@@ -211,6 +215,7 @@ export default function App() {
       <Shell me={me} can={can}>
         <Routes>
           <Route path="/"                 element={<Dashboard />} />
+          <Route path="/purchase"         element={<Need p="po.view"><PurchaseDashboard /></Need>} />
           <Route path="/orders"           element={<Need p="po.view"><POList /></Need>} />
           <Route path="/orders/new"       element={<Need p="po.create"><NewPO /></Need>} />
           <Route path="/orders/:id"       element={<Need p="po.view"><PODetail /></Need>} />
@@ -469,6 +474,8 @@ function Header({ me, onMenu }) {
             </>
           )}
         </nav>
+
+        <NotificationBell />
 
         <div className="relative">
           <button onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
