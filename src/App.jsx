@@ -27,6 +27,7 @@ import Tasks          from './pages/Tasks'
 import NewTask        from './pages/NewTask'
 import TaskDetail     from './pages/TaskDetail'
 import TaskReports    from './pages/TaskReports'
+import TaskSchedules  from './pages/TaskSchedules'
 
 const Ctx = createContext(null)
 export const useMe = () => useContext(Ctx)
@@ -111,7 +112,8 @@ const MODULES = [
     pages: [
       { to: '/tasks',         label: 'Tasks',       short: 'Tasks',   perm: 'tasks.view' },
       { to: '/tasks/new',     label: 'Raise task',  short: 'Raise',   perm: 'tasks.create' },
-      { to: '/tasks/reports', label: 'Performance', short: 'Reports', perm: 'tasks.reports' }
+      { to: '/tasks/reports',   label: 'Performance',    short: 'Reports', perm: 'tasks.reports' },
+      { to: '/tasks/schedules', label: 'Recurring tasks', short: 'Repeat',  perm: 'tasks.schedules' }
     ]
   },
   {
@@ -229,6 +231,7 @@ export default function App() {
           <Route path="/tasks"            element={<Need p="tasks.view"><Tasks /></Need>} />
           <Route path="/tasks/new"        element={<Need p="tasks.create"><NewTask /></Need>} />
           <Route path="/tasks/reports"    element={<Need p="tasks.reports"><TaskReports /></Need>} />
+          <Route path="/tasks/schedules"  element={<Need p="tasks.schedules"><TaskSchedules /></Need>} />
           <Route path="/tasks/:id"        element={<Need p="tasks.view"><TaskDetail /></Need>} />
 
           <Route path="/suppliers"        element={<Need p="suppliers.view"><Suppliers /></Need>} />
@@ -605,6 +608,7 @@ function Need({ p, children }) {
 const LEGACY = {
   'insights.view':   ['manager', 'hod', 'admin'],
   'sales.import':    ['manager', 'hod', 'admin'],
+  'tasks.schedules': ['admin'],
   'suppliers.view':  ['hod', 'admin'],
   'suppliers.edit':  ['hod', 'admin'],
   'items.view':      ['hod', 'admin'],
