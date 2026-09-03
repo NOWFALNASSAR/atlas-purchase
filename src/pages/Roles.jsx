@@ -76,7 +76,7 @@ export default function Roles() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 pb-24">
+    <div className="page page-md space-y-4 pb-24">
       <div>
         <h1 className="text-xl font-bold">Roles</h1>
         <p className="text-sm text-slate2">
@@ -142,8 +142,8 @@ export default function Roles() {
       })}
 
       {(dirty || saved) && (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white px-4 py-3 md:static md:border-0 md:bg-transparent md:px-0">
-          <div className="mx-auto flex max-w-2xl items-center gap-3">
+        <div className="fixed inset-x-0 bottom-[3.25rem] z-30 border-t border-line bg-white px-4 py-3 shadow-pop md:static md:border-0 md:bg-transparent md:px-0 md:shadow-none">
+          <div className="page page-md flex items-center gap-3">
             <span className="flex-1 text-[12px] text-slate2">
               {saved
                 ? `Saved. ${counts[role] || 0} ${counts[role] === 1 ? 'person is' : 'people are'} on this role.`

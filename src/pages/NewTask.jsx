@@ -65,7 +65,7 @@ export default function NewTask() {
 
   if (created) {
     return (
-      <div className="mx-auto max-w-lg space-y-4">
+      <div className="page page-sm space-y-4">
         <div className="card p-4">
           <div className="text-sm font-bold">Task raised</div>
           <div className="font-mono text-[12px] text-slate2">{created.task_no}</div>
@@ -94,7 +94,7 @@ export default function NewTask() {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-4">
+    <div className="page page-sm space-y-4">
       <div>
         <h1 className="text-xl font-bold">Raise a task</h1>
         <p className="text-sm text-slate2">

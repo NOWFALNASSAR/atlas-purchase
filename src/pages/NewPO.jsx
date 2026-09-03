@@ -95,7 +95,7 @@ export default function NewPO() {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-5">
+    <div className="page page-sm space-y-5">
       <div>
         <h1 className="text-xl font-bold">New purchase order</h1>
         <p className="text-sm text-slate2">Supplier and type first, then add items and split them across shops.</p>

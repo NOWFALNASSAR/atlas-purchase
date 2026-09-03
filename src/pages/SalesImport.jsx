@@ -188,7 +188,7 @@ export default function SalesImport() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="page page-lg space-y-4">
       <div>
         <h1 className="text-xl font-bold">Upload sales</h1>
         <p className="text-sm text-slate2">

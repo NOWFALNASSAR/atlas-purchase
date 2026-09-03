@@ -67,7 +67,7 @@ export default function Godown() {
   const old = shown.filter(r => r.days_held > 30)
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="page page-lg space-y-4">
       <div>
         <h1 className="text-xl font-bold">Godown</h1>
         <p className="text-sm text-slate2">

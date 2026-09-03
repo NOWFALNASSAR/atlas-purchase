@@ -99,7 +99,7 @@ export default function PODetail() {
   const addLine = () => setLines(l => [...l, { po_id: po.id, purchase_rate: '', selling_rate: '' }])
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="page page-lg space-y-5">
       <div className="card overflow-hidden">
         <div className="flex items-start gap-3 bg-ink p-4 text-white">
           <div className="min-w-0 flex-1">

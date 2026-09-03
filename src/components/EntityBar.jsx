@@ -9,25 +9,27 @@ export default function EntityBar() {
 
   if (entities.length <= 1) {
     return entities.length === 1 ? (
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-slate2">
-        {entities[0].name}
-      </div>
+      <div className="text-xs font-medium text-slate2">{entities[0].name}</div>
     ) : null
   }
 
-  const opts = [{ id: 'mixed', label: 'Mixed' },
+  const opts = [{ id: 'mixed', label: 'All' },
                 ...entities.map(e => ({ id: e.id, label: e.code }))]
 
   return (
-    <div className="flex gap-1 overflow-x-auto pb-1">
-      {opts.map(o => (
-        <button key={o.id} onClick={() => setEntityId(o.id)}
-          title={o.id === 'mixed' ? 'All entities together' : entities.find(e => e.id === o.id)?.name}
-          className={'whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-semibold ' +
-            (entityId === o.id ? 'bg-ink text-white' : 'border border-line bg-white text-slate2')}>
-          {o.label}
-        </button>
-      ))}
+    <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
+      <div className="inline-flex rounded-md border border-line bg-white p-0.5 shadow-card">
+        {opts.map(o => (
+          <button key={o.id} onClick={() => setEntityId(o.id)}
+            title={o.id === 'mixed' ? 'All entities together' : entities.find(e => e.id === o.id)?.name}
+            className={'whitespace-nowrap rounded px-3 py-1.5 text-sm font-semibold transition ' +
+              (entityId === o.id
+                ? 'bg-ink text-white'
+                : 'text-slate2 hover:bg-paper hover:text-ink')}>
+            {o.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

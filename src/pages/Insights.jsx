@@ -103,7 +103,7 @@ export default function Insights() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="page page-lg space-y-5">
       <div>
         <h1 className="text-xl font-bold">Insights</h1>
         <p className="text-sm text-slate2">

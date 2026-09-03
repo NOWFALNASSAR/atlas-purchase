@@ -44,7 +44,7 @@ export default function Compare() {
   const item = items.find(i => i.id === itemId)
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5">
+    <div className="page page-lg space-y-5">
       <div>
         <h1 className="text-xl font-bold">Supplier comparison</h1>
         <p className="text-sm text-slate2">Before you order, check what this item has actually cost you.</p>

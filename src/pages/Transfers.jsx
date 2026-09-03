@@ -40,7 +40,7 @@ export default function Transfers() {
   const notReceived = docs.filter(d => d.status === 'not received').length
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="page page-lg space-y-4">
       <div>
         <h1 className="text-xl font-bold">Transfers</h1>
         <p className="text-sm text-slate2">
@@ -178,7 +178,7 @@ export default function Transfers() {
       {open && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 md:items-center"
              onClick={() => setOpen(null)}>
-          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-xl bg-white md:rounded-xl"
+          <div className="safe-b max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-xl bg-white shadow-pop md:max-w-xl md:rounded-xl"
                onClick={e => e.stopPropagation()}>
             <div className="border-b border-line p-4">
               <div className="flex items-start justify-between">

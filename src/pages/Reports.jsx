@@ -86,7 +86,7 @@ export default function Reports() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="page page-lg space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Reports</h1>
         <button className="btn-ghost" onClick={exportExcel} disabled={!rows.length}>Export Excel</button>

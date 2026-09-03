@@ -64,7 +64,7 @@ export default function TaskDetail() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
+    <div className="page page-md space-y-4">
       {/* header */}
       <div className="card overflow-hidden">
         <div className="bg-ink p-4 text-white">

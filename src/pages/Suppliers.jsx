@@ -158,7 +158,7 @@ export default function Suppliers() {
   const pages = Math.ceil(total / PAGE)
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="page page-lg space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Suppliers</h1>
         <div className="flex gap-2">
@@ -342,7 +342,7 @@ function F({ label, v, on, type = 'text' }) {
 export function Modal({ title, children, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 md:items-center" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-xl bg-white p-5 md:rounded-xl"
+      <div className="safe-b max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-xl bg-white p-5 shadow-pop md:max-w-xl md:rounded-xl lg:max-w-2xl lg:p-6"
            onClick={e => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-bold">{title}</h2>

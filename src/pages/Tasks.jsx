@@ -79,7 +79,7 @@ export default function Tasks() {
 
   if (!loading && myDepts.length === 0) {
     return (
-      <div className="mx-auto max-w-lg">
+      <div className="page page-sm">
         <div className="card p-8 text-center">
           <div className="text-sm font-bold">You are not in a department yet</div>
           <p className="mt-1 text-[13px] text-slate2">
@@ -92,7 +92,7 @@ export default function Tasks() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="page page-lg space-y-4">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-bold">Tasks</h1>

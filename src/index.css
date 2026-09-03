@@ -2,24 +2,196 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==================================================================
+   ATLAS — interface styles
+
+   Three sizes, one codebase:
+     under 768   phone      bottom bar, single column, 16px inputs
+     768–1023    tablet     icon rail on the left, no bottom bar
+     1024 and up laptop/PC  full sidebar, wider content, denser rows
+
+   Figures are set in tabular numerals everywhere. In a system where
+   people compare rate against rate down a column, digits that do not
+   line up are a real cost, and it is free to fix.
+   ================================================================== */
+
 @layer base {
-  body { @apply bg-paper text-ink antialiased; }
-  input, select, textarea {
-    @apply w-full rounded-md border border-line bg-white px-3 py-2 text-[15px]
-           outline-none focus:border-ink focus:ring-2 focus:ring-ink/10;
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    @apply bg-paper text-ink antialiased;
+    font-feature-settings: 'tnum' 1, 'cv05' 1;
+    text-rendering: optimizeLegibility;
   }
-  label { @apply block text-[11px] font-semibold uppercase tracking-wider text-slate2 mb-1; }
+
+  h1 { @apply text-xl font-semibold tracking-tight lg:text-2xl; }
+  h2 { @apply text-lg font-semibold tracking-tight; }
+
+  /* 16px on phones stops iOS zooming the page when a field is tapped.
+     Smaller on larger screens, where density is worth more. */
+  input, select, textarea {
+    @apply w-full rounded-md border border-line bg-white px-3 py-2.5
+           text-[16px] text-ink placeholder:text-mute
+           outline-none transition
+           focus:border-ink3 focus:ring-4 focus:ring-ink/[.07]
+           md:py-2 md:text-[14px]
+           disabled:bg-line2 disabled:text-mute;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  select {
+    @apply appearance-none bg-no-repeat pr-9;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%235B6879' stroke-width='1.7' stroke-linecap='round'%3E%3Cpath d='M4 6.5 8 10.5 12 6.5'/%3E%3C/svg%3E");
+    background-position: right 10px center;
+  }
+
+  input[type='checkbox'], input[type='radio'] {
+    @apply h-[18px] w-[18px] shrink-0 rounded border-line
+           text-ink accent-ink focus:ring-2 focus:ring-ink/20;
+  }
+
+  /* Sentence case, not shouted. The old uppercase tracking read as
+     decoration; a form label only needs to be quiet and legible. */
+  label {
+    @apply mb-1.5 block text-xs font-medium normal-case tracking-normal text-slate2;
+  }
+
+  :focus-visible { @apply outline-none ring-2 ring-ink/40 ring-offset-1 ring-offset-white; }
+
+  ::-webkit-scrollbar { @apply h-2 w-2; }
+  ::-webkit-scrollbar-thumb { @apply rounded-full bg-line; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-mute; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
 }
 
 @layer components {
-  .btn      { @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5
-                     text-sm font-semibold transition disabled:opacity-40; }
-  .btn-dark { @apply btn bg-ink text-white hover:bg-ink/90; }
-  .btn-gold { @apply btn bg-gold text-white hover:bg-gold/90; }
-  .btn-ghost{ @apply btn border border-line bg-white hover:bg-paper; }
-  .btn-bad  { @apply btn bg-bad text-white hover:bg-bad/90; }
-  .card     { @apply rounded-lg border border-line bg-white; }
-  .tag      { @apply inline-block rounded px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide; }
+
+  /* ---------- page containers -----------------------------------
+     Every page opts into one of four widths. A form stays narrow
+     even on a 27-inch monitor, because a 1400px-wide text field is
+     not easier to fill in. A table earns the extra room. */
+
+  .page     { @apply mx-auto w-full; }
+  .page-sm  { @apply max-w-lg  lg:max-w-xl; }
+  .page-md  { @apply max-w-2xl lg:max-w-3xl; }
+  .page-lg  { @apply max-w-3xl lg:max-w-5xl 2xl:max-w-6xl; }
+  .page-xl  { @apply max-w-4xl lg:max-w-6xl 2xl:max-w-content; }
+
+  /* ---------- buttons -------------------------------------------
+     Comfortable to hit with a thumb, tighter with a mouse. */
+
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2
+           rounded-md px-4 py-2.5 text-base font-semibold
+           transition active:scale-[.985]
+           disabled:pointer-events-none disabled:opacity-40
+           md:py-2 md:text-sm;
+  }
+  .btn-dark  { @apply btn bg-ink text-white shadow-card hover:bg-ink2; }
+  .btn-gold  { @apply btn bg-gold text-white shadow-card hover:brightness-95; }
+  .btn-ghost { @apply btn border border-line bg-white text-ink shadow-card hover:border-mute hover:bg-paper; }
+  .btn-bad   { @apply btn bg-bad text-white shadow-card hover:brightness-95; }
+  .btn-quiet { @apply btn bg-transparent px-2 py-1.5 text-slate2 hover:bg-line2 hover:text-ink; }
+  .btn-sm    { @apply px-3 py-1.5 text-sm; }
+
+  /* ---------- surfaces ------------------------------------------- */
+
+  .card  { @apply rounded-lg border border-line bg-white shadow-card; }
+  .panel { @apply card p-4 lg:p-5; }
+
+  .tag {
+    @apply inline-flex items-center rounded px-1.5 py-0.5 text-2xs
+           font-semibold uppercase tracking-wide;
+  }
+
+  /* ---------- figures --------------------------------------------
+     The numbers are what people came for. Give them the weight. */
+
+  .stat      { @apply text-2xl font-semibold tracking-tight lg:text-3xl; }
+  .stat-label{ @apply text-xs font-medium text-slate2; }
+
+  /* ---------- responsive grid helpers ---------------------------- */
+
+  .grid-stats { @apply grid grid-cols-2 gap-3 lg:grid-cols-4; }
+  .grid-form  { @apply grid grid-cols-1 gap-3 sm:grid-cols-2; }
+
+  /* ---------- sidebar -------------------------------------------- */
+
+  .nav-item {
+    @apply flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium
+           text-white/65 transition hover:bg-white/[.07] hover:text-white;
+  }
+  .nav-item-on { @apply bg-white/[.11] font-semibold text-white; }
+  .nav-sub {
+    @apply block rounded px-3 py-1.5 text-sm text-white/55
+           transition hover:bg-white/[.07] hover:text-white;
+  }
+  .nav-sub-on { @apply bg-white/[.11] font-semibold text-white; }
 }
 
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+/* ==================================================================
+   Data tables
+
+   A phone is 360px wide. A table of six columns is not. Rather than
+   squeezing the columns until the rates are unreadable, the table
+   keeps its natural width and the card scrolls sideways.
+
+   The :has() selector beats a .overflow-hidden utility on the same
+   element, so pages that already wrap a table in "card overflow-hidden"
+   are fixed without touching them.
+   ================================================================== */
+
+.card:has(> table),
+.card:has(> div > table) { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.card > table { min-width: 100%; }
+
+.card table th,
+.card table td { white-space: nowrap; }
+
+.card table th:first-child,
+.card table td:first-child {
+  position: sticky;
+  left: 0;
+  background: inherit;
+  white-space: normal;
+  min-width: 8.5rem;
+}
+
+.card table thead th { background: #F4F6F9; }
+.card table tbody tr { background: #FFFFFF; }
+.card table tbody tr:hover { background: #FAFBFD; }
+
+@media (min-width: 1024px) {
+  .card table th:first-child,
+  .card table td:first-child { position: static; min-width: 0; }
+}
+
+/* Tables inside a card no longer need the shouted header style the
+   pages ask for; soften it in one place instead of twenty-six. */
+.card table thead th {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  color: #5B6879;
+}
+
+/* ==================================================================
+   Comfort
+   ================================================================== */
+
+/* Sheets on phones sit above the home indicator. */
+.safe-b { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; }
+  .card { box-shadow: none; border-color: #ccc; }
+}

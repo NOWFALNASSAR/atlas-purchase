@@ -182,7 +182,7 @@ export default function Items() {
   const pages = Math.ceil(total / PAGE)
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="page page-lg space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Items</h1>
         <div className="flex gap-2">

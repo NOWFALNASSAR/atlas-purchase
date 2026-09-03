@@ -57,7 +57,7 @@ export default function SalesDashboard() {
   const noData = !loading && today.length === 0 && progress.length === 0
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5">
+    <div className="page page-xl space-y-5">
       <div>
         <h1 className="text-xl font-bold">Sales</h1>
         <p className="text-sm text-slate2">

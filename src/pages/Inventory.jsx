@@ -142,7 +142,7 @@ export default function Inventory() {
   }), { items: 0, qty: 0, purchase_value: 0, cost_value: 0, selling_value: 0 })
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
+    <div className="page page-xl space-y-4">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-bold">Godown inventory</h1>
@@ -316,7 +316,7 @@ export default function Inventory() {
       {detail && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 md:items-center"
              onClick={() => setDetail(null)}>
-          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-xl bg-white p-5 md:rounded-xl"
+          <div className="safe-b max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-xl bg-white p-5 shadow-pop md:max-w-xl md:rounded-xl lg:p-6"
                onClick={e => e.stopPropagation()}>
             <div className="mb-3 flex items-start justify-between">
               <div>

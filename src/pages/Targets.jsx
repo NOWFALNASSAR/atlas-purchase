@@ -76,7 +76,7 @@ export default function Targets() {
   const missing = branches.filter(b => !targetFor(b.id)).length
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="page page-lg space-y-4">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-bold">Targets</h1>

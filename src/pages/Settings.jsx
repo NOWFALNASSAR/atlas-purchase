@@ -16,7 +16,7 @@ export default function Settings() {
   ]
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
+    <div className="page page-md space-y-4">
       <h1 className="text-xl font-bold">Settings</h1>
 
       {saved && <div className="rounded-md bg-good/10 px-3 py-2 text-sm text-good">{saved}</div>}

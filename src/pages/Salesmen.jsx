@@ -60,7 +60,7 @@ export default function Salesmen() {
   const top = shown.slice(0, 3)
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
+    <div className="page page-xl space-y-4">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-bold">Salesmen</h1>
