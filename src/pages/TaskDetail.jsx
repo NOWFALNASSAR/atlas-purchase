@@ -4,6 +4,7 @@ import { db, dt, dtTime } from '../lib/db'
 import { useMe, useCan } from '../App'
 import TaskMedia from '../components/TaskMedia'
 import Picker from '../components/Picker'
+import { taskMessage, openWhatsApp } from '../lib/wa'
 
 const LABEL = {
   raised: 'New', reissued: 'Reissued', acknowledged: 'Accepted',
@@ -27,6 +28,8 @@ export default function TaskDetail() {
   const [points, setPoints] = useState([])
   const [notes, setNotes] = useState([])
   const [previous, setPrevious] = useState(null)
+  const [mrf, setMrf] = useState(null)
+  const [waNo, setWaNo] = useState(null)
   const [depts, setDepts] = useState([])
   const [myDepts, setMyDepts] = useState([])
   const [isMD, setIsMD] = useState(false)
@@ -40,7 +43,7 @@ export default function TaskDetail() {
   useEffect(() => { load() }, [id])
 
   async function load() {
-    const [task, ev, cl, nt, prev, dm, dp] = await Promise.all([
+    const [task, ev, cl, nt, prev, dm, dp, mr] = await Promise.all([
       db.from('v_task_full').select('*').eq('id', id).maybeSingle(),
       db.from('task_events').select('*').eq('task_id', id).order('created_at'),
       db.from('task_checklist').select('*').eq('task_id', id).order('sort_order'),
@@ -49,7 +52,8 @@ export default function TaskDetail() {
       db.from('v_task_previous').select('*').eq('task_id', id).maybeSingle(),
       db.from('department_members').select('department_id, departments(is_md_office)')
         .eq('profile_id', me.id).eq('active', true),
-      db.from('departments').select('id,name,code,kind').eq('active', true).order('sort_order')
+      db.from('departments').select('id,name,code,kind,whatsapp').eq('active', true).order('sort_order'),
+      db.from('task_mrf').select('*').eq('task_id', id).maybeSingle()
     ])
 
     if (!task.data) { setGone(true); return }
@@ -61,6 +65,8 @@ export default function TaskDetail() {
     setMyDepts((dm.data || []).map(d => d.department_id))
     setIsMD((dm.data || []).some(d => d.departments?.is_md_office))
     setDepts(dp.data || [])
+    setMrf(mr.data || null)
+    setWaNo((dp.data || []).find(d => d.id === task.data.to_dept)?.whatsapp || null)
   }
 
   if (gone) return (
@@ -218,6 +224,51 @@ export default function TaskDetail() {
           </div>
         )}
       </div>
+
+      {/* ---------- manpower request ---------- */}
+      {mrf && (
+        <section className="card border-gold/40 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-gold">Manpower request</h2>
+          <dl className="grid gap-x-4 gap-y-2.5 sm:grid-cols-2">
+            <Field k="Position" v={mrf.position} />
+            <Field k="How many" v={mrf.headcount} />
+            <Field k="Type" v={(mrf.employment || '').replace('_', ' ')} />
+            <Field k="For" v={depts.find(d => d.id === mrf.for_department)?.name} />
+            <Field k="Salary" v={
+              (mrf.salary_min || mrf.salary_max)
+                ? [mrf.salary_min, mrf.salary_max].filter(Boolean)
+                    .map(x => '₹' + Number(x).toLocaleString('en-IN')).join(' to ')
+                  + ' per ' + mrf.salary_period
+                : null} />
+            <Field k="Needed by" v={mrf.expected_by ? dt(mrf.expected_by) : null} />
+            <Field k="Qualification" v={mrf.qualification} />
+            <Field k="Experience" v={mrf.experience} />
+            <Field k="Replacing" v={mrf.replacing} />
+          </dl>
+          {mrf.reason && (
+            <div className="mt-3 border-t border-line pt-3">
+              <div className="stat-label">Why</div>
+              <p className="mt-0.5 whitespace-pre-wrap text-sm">{mrf.reason}</p>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ---------- send it ---------- */}
+      {involved && open && (
+        <button className="btn-ghost w-full"
+          onClick={() => openWhatsApp(waNo, taskMessage(t, mrf))}>
+          {waNo
+            ? `Send to ${t.to_dept_name} on WhatsApp`
+            : 'Send on WhatsApp — pick the number'}
+        </button>
+      )}
+      {involved && open && !waNo && (
+        <p className="-mt-1 text-center text-2xs text-slate2">
+          {t.to_dept_name} has no WhatsApp number saved, so you will have to choose
+          the contact. Add one on Masters → Departments to make it one tap.
+        </p>
+      )}
 
       {/* ---------- what happened last time ---------- */}
       {previous?.previous_notes && (
@@ -476,6 +527,16 @@ export default function TaskDetail() {
       <Link to="/tasks" className="block text-center text-sm font-medium text-slate2">
         Back to tasks
       </Link>
+    </div>
+  )
+}
+
+function Field({ k, v }) {
+  if (!v) return null
+  return (
+    <div>
+      <dt className="stat-label">{k}</dt>
+      <dd className="text-sm font-medium">{v}</dd>
     </div>
   )
 }

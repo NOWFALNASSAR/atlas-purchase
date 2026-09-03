@@ -17,7 +17,16 @@ export default function NewTask() {
 
   const [f, setF] = useState({
     from_dept: '', to_dept: '', support: [], title: '', details: '',
-    priority: 'normal', due_date: '', assigned_to: null
+    priority: 'normal', due_date: '', assigned_to: null, task_type: 'general'
+  })
+
+  /* Most tasks are a sentence. A manpower request is a form — the
+     position, the salary and the date. Asking for that in free text
+     means it arrives incomplete and HR spends a week chasing it. */
+  const [mrf, setMrf] = useState({
+    position: '', for_department: '', headcount: 1, employment: 'full_time',
+    salary_min: '', salary_max: '', salary_period: 'month',
+    expected_by: '', qualification: '', experience: '', reason: '', replacing: ''
   })
   const [points, setPoints] = useState([''])
 
@@ -76,6 +85,8 @@ export default function NewTask() {
     if (!f.to_dept) return alert('Which department is answerable?')
     if (f.from_dept === f.to_dept) return alert('Pick a different department to send it to')
     if (!f.title.trim()) return alert('Give the task a title')
+    if (f.task_type === 'mrf' && !mrf.position.trim())
+      return alert('Which position are you asking for?')
 
     setBusy(true)
 
@@ -83,7 +94,7 @@ export default function NewTask() {
 
     const { data, error } = await db.from('tasks').insert({
       from_dept: f.from_dept, to_dept: f.to_dept,
-      title: f.title.trim(), details: f.details || null,
+      title: f.title.trim(), details: f.details || null, task_type: f.task_type,
       priority: f.priority, due_date: f.due_date || null,
       assigned_to: f.assigned_to, shop_id: shopId,
       raised_by: me.id
@@ -95,6 +106,24 @@ export default function NewTask() {
     if (support.length) {
       await db.from('task_departments')
         .insert(support.map(department_id => ({ task_id: data.id, department_id })))
+    }
+
+    if (f.task_type === 'mrf') {
+      await db.from('task_mrf').insert({
+        task_id: data.id,
+        position: mrf.position.trim(),
+        for_department: mrf.for_department || f.from_dept,
+        headcount: Number(mrf.headcount) || 1,
+        employment: mrf.employment,
+        salary_min: mrf.salary_min ? Number(mrf.salary_min) : null,
+        salary_max: mrf.salary_max ? Number(mrf.salary_max) : null,
+        salary_period: mrf.salary_period,
+        expected_by: mrf.expected_by || null,
+        qualification: mrf.qualification || null,
+        experience: mrf.experience || null,
+        reason: mrf.reason || null,
+        replacing: mrf.replacing || null
+      })
     }
 
     const list = points.map(p => p.trim()).filter(Boolean)
@@ -234,6 +263,117 @@ export default function NewTask() {
                 {f.support.length} department{f.support.length > 1 ? 's' : ''} supporting.
               </p>
             )}
+          </div>
+        )}
+
+        <div>
+          <label>What kind of task</label>
+          <select value={f.task_type}
+            onChange={e => {
+              const v = e.target.value
+              setF(x => ({
+                ...x, task_type: v,
+                title: v === 'mrf' && !x.title ? 'Manpower request' : x.title
+              }))
+            }}>
+            <option value="general">General</option>
+            <option value="mrf">MRF — manpower request</option>
+            <option value="maintenance">Maintenance</option>
+            <option value="report">Report</option>
+            <option value="audit">Audit</option>
+            <option value="complaint">Complaint</option>
+          </select>
+          {f.task_type === 'mrf' && (
+            <p className="mt-1 text-2xs text-slate2">
+              Send this to HR. The form below goes with it, so nobody has to ask
+              what the salary or the date is.
+            </p>
+          )}
+        </div>
+
+        {f.task_type === 'mrf' && (
+          <div className="rounded-lg border border-gold/40 bg-gold2/50 p-3.5">
+            <h3 className="mb-3 text-sm font-semibold text-gold">Manpower request</h3>
+            <div className="space-y-3">
+              <div>
+                <label>Position *</label>
+                <input value={mrf.position} placeholder="Sales executive"
+                  onChange={e => setMrf(v => ({ ...v, position: e.target.value }))} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label>How many</label>
+                  <input type="number" min={1} max={99} value={mrf.headcount}
+                    onChange={e => setMrf(v => ({ ...v, headcount: e.target.value }))} />
+                </div>
+                <div>
+                  <label>Type</label>
+                  <select value={mrf.employment}
+                    onChange={e => setMrf(v => ({ ...v, employment: e.target.value }))}>
+                    <option value="full_time">Full time</option>
+                    <option value="part_time">Part time</option>
+                    <option value="contract">Contract</option>
+                    <option value="trainee">Trainee</option>
+                  </select>
+                </div>
+              </div>
+
+              <Picker label="For which department or showroom"
+                placeholder="Where will they work"
+                options={depts.map(label)}
+                value={mrf.for_department}
+                onChange={id => setMrf(v => ({ ...v, for_department: id }))} allowEmpty />
+
+              <div>
+                <label>Expected salary</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <input type="number" inputMode="numeric" placeholder="From"
+                    value={mrf.salary_min}
+                    onChange={e => setMrf(v => ({ ...v, salary_min: e.target.value }))} />
+                  <input type="number" inputMode="numeric" placeholder="To"
+                    value={mrf.salary_max}
+                    onChange={e => setMrf(v => ({ ...v, salary_max: e.target.value }))} />
+                  <select value={mrf.salary_period}
+                    onChange={e => setMrf(v => ({ ...v, salary_period: e.target.value }))}>
+                    <option value="month">per month</option>
+                    <option value="day">per day</option>
+                    <option value="year">per year</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label>Needed by</label>
+                <input type="date" value={mrf.expected_by}
+                  onChange={e => setMrf(v => ({ ...v, expected_by: e.target.value }))} />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label>Qualification</label>
+                  <input value={mrf.qualification} placeholder="Plus two and above"
+                    onChange={e => setMrf(v => ({ ...v, qualification: e.target.value }))} />
+                </div>
+                <div>
+                  <label>Experience</label>
+                  <input value={mrf.experience} placeholder="2 years in retail"
+                    onChange={e => setMrf(v => ({ ...v, experience: e.target.value }))} />
+                </div>
+              </div>
+
+              <div>
+                <label>Replacing someone?</label>
+                <input value={mrf.replacing} placeholder="Name of who left, if any"
+                  onChange={e => setMrf(v => ({ ...v, replacing: e.target.value }))} />
+              </div>
+
+              <div>
+                <label>Why is this needed</label>
+                <textarea rows={2} value={mrf.reason}
+                  onChange={e => setMrf(v => ({ ...v, reason: e.target.value }))} />
+              </div>
+            </div>
           </div>
         )}
 
