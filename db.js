@@ -1,8 +1,21 @@
 import { createClient } from '@supabase/supabase-js'
 
+/* If either setting is missing, createClient throws the moment this file
+   loads — before React starts — and the browser shows a blank white page
+   with no clue why. So check first, and let main.jsx put a readable
+   message on the screen instead. */
+
+const url = import.meta.env.VITE_SUPABASE_URL
+const key = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+export const configured = Boolean(url && key)
+
+export const missingSetting =
+  !url && !key ? 'both settings' : !url ? 'VITE_SUPABASE_URL' : !key ? 'VITE_SUPABASE_ANON_KEY' : null
+
 export const db = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
+  url || 'https://placeholder.supabase.co',
+  key || 'placeholder-key'
 )
 
 /* ---------- money & numbers (Indian format) ---------- */
@@ -21,6 +34,24 @@ export const lakh = n => {
 
 export const margin = (purchase, selling) =>
   selling > 0 ? +(((selling - purchase) / selling) * 100).toFixed(2) : 0
+
+/* Fixed-decimal formatting that cannot throw.
+
+   Calling .toFixed() on a value that turned out to be undefined takes
+   down the whole page — React unmounts the tree and the screen goes
+   blank. That is a heavy price for one missing figure. A view returns
+   null, a sync has not run, a branch has no target: any of those is
+   enough. Use this anywhere a figure comes from the database.
+
+   num(x)          -> '0'      when x is undefined, null or not a number
+   num(12.345, 1)  -> '12.3'
+   num(null, 1, '—') -> '—'                                            */
+export const num = (v, decimals = 0, fallback = null) => {
+  const n = Number(v)
+  if (v === null || v === undefined || v === '' || Number.isNaN(n))
+    return fallback ?? (0).toFixed(decimals)
+  return n.toFixed(decimals)
+}
 
 export const dt = s => (s ? new Date(s).toLocaleDateString('en-IN',
   { day: '2-digit', month: 'short', year: '2-digit' }) : '')
