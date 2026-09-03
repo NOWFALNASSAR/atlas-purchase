@@ -21,18 +21,25 @@ export default function Users() {
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(null)
   const [pwFor, setPwFor] = useState(null)
+  const [depts, setDepts] = useState([])
+  const [members, setMembers] = useState([])   // every membership, all users
 
   useEffect(() => { load() }, [])
 
   async function load() {
     try {
-      const [{ data: p }, { data: e }, rights] = await Promise.all([
+      const [{ data: p }, { data: e }, rights, { data: d }, { data: m }] = await Promise.all([
         db.from('profiles').select('*').order('full_name'),
         db.from('entities').select('*').eq('active', true).order('code'),
-        loadRights()
+        loadRights(),
+        db.from('departments').select('id,name,code,kind,is_md_office')
+          .eq('active', true).order('sort_order'),
+        db.from('department_members').select('*').eq('active', true)
       ])
       setRows(p || [])
       setEntities(e || [])
+      setDepts(d || [])
+      setMembers(m || [])
       setPermissions(rights.permissions)
       setRolePerms(rights.rolePerms)
       setRoles(rights.roles)
@@ -143,6 +150,13 @@ export default function Users() {
                   </div>
                   <div className="text-[11px] text-slate2">
                     {u.username ? u.username + ' · ' : ''}{labelOf(u.role, roles)}
+                    {(() => {
+                      const ds = members.filter(m => m.profile_id === u.id)
+                      return ds.length
+                        ? ' · ' + ds.map(m => depts.find(d => d.id === m.department_id)?.name)
+                            .filter(Boolean).join(', ')
+                        : ' · no department'
+                    })()}
                     {u.approval_limit > 0 && ' · up to ' + inr(u.approval_limit)}
                     {isAdminRole(u.role, roles)
                       ? ' · full rights'
@@ -186,7 +200,7 @@ export default function Users() {
       {edit && (
         <Modal title={edit.full_name || 'User'} onClose={() => setEdit(null)}>
           <div className="mb-4 flex gap-1 rounded-md bg-paper p-1">
-            {[['details', 'Details'], ['rights', 'Rights']].map(([k, l]) => (
+            {[['details', 'Details'], ['depts', 'Departments'], ['rights', 'Rights']].map(([k, l]) => (
               <button key={k} onClick={() => setTab(k)}
                 className={'flex-1 rounded px-3 py-1.5 text-sm font-semibold ' +
                   (tab === k ? 'bg-white text-ink shadow-sm' : 'text-slate2')}>
@@ -198,6 +212,10 @@ export default function Users() {
           {tab === 'details' ? (
             <Details edit={edit} setEdit={setEdit} entities={entities} roles={roles}
               toggleEntity={toggleEntity} isSelf={edit.id === me.id} />
+          ) : tab === 'depts' ? (
+            <Depts user={edit} depts={depts}
+              mine={members.filter(m => m.profile_id === edit.id)}
+              onChange={load} />
           ) : (
             <Rights edit={edit} setEdit={setEdit} groups={groups} roles={roles}
               rolePerms={rolePerms} allCodes={allCodes} />
@@ -296,6 +314,110 @@ function Details({ edit, setEdit, entities, roles, toggleEntity, isSelf }) {
           Supabase.
         </p>
       )}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+
+/* A role decides what somebody can SEE. A department decides which
+   tasks reach them. They are two different things, and until now there
+   was nowhere to set the second one — which is why people with a role
+   were still being told they were not in a department. */
+
+const POSTS = [
+  ['executive', 'Executive'],
+  ['manager',   'Manager'],
+  ['hod',       'Head of department']
+]
+
+function Depts({ user, depts, mine, onChange }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+
+  const postOf = id => mine.find(m => m.department_id === id)?.post
+  const isIn = id => mine.some(m => m.department_id === id)
+
+  async function toggle(id) {
+    setBusy(true); setErr(null)
+    const res = isIn(id)
+      ? await db.from('department_members').delete()
+          .eq('profile_id', user.id).eq('department_id', id)
+      : await db.from('department_members')
+          .insert({ profile_id: user.id, department_id: id, post: 'executive', active: true })
+    setBusy(false)
+    if (res.error) return setErr(res.error.message)
+    onChange()
+  }
+
+  async function setPost(id, post) {
+    setBusy(true); setErr(null)
+    const { error } = await db.from('department_members').update({ post })
+      .eq('profile_id', user.id).eq('department_id', id)
+    setBusy(false)
+    if (error) return setErr(error.message)
+    onChange()
+  }
+
+  const list = [...depts].sort((a, b) =>
+    (a.kind === 'showroom' ? 1 : 0) - (b.kind === 'showroom' ? 1 : 0))
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-slate2">
+        Which departments and showrooms this person belongs to. Tasks sent to a
+        department reach everyone in it. Somebody with no department cannot raise
+        or receive tasks at all.
+      </p>
+
+      {mine.length === 0 && (
+        <div className="rounded-md bg-gold2 px-3 py-2 text-xs text-gold">
+          Not in any department yet. Tick at least one, or they will be told they
+          are not in a department when they try to raise a task.
+        </div>
+      )}
+
+      {err && (
+        <div className="rounded-md bg-bad/10 px-3 py-2 text-xs text-bad">{err}</div>
+      )}
+
+      <ul className="card divide-y divide-line">
+        {list.map(d => {
+          const on = isIn(d.id)
+          return (
+            <li key={d.id} className="px-3 py-2.5">
+              <label className="flex cursor-pointer items-center gap-3">
+                <input type="checkbox" className="!w-auto" checked={on}
+                  disabled={busy} onChange={() => toggle(d.id)} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold normal-case tracking-normal">
+                    {d.name}
+                  </span>
+                  <span className="block text-2xs text-slate2">
+                    {d.is_md_office ? 'Sees every task, settles disputes'
+                      : d.kind === 'showroom' ? 'Showroom' : d.code}
+                  </span>
+                </span>
+              </label>
+
+              {on && (
+                <div className="mt-2 pl-8">
+                  <select className="!w-auto text-sm" disabled={busy}
+                    value={postOf(d.id) || 'executive'}
+                    onChange={e => setPost(d.id, e.target.value)}>
+                    {POSTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  </select>
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+
+      <p className="text-2xs text-slate2">
+        Changes here save straight away — the Save user button below is for the
+        Details and Rights tabs.
+      </p>
     </div>
   )
 }

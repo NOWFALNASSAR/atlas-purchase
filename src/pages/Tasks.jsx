@@ -90,10 +90,14 @@ export default function Tasks() {
     return (
       <div className="page page-sm">
         <div className="card p-8 text-center">
-          <div className="text-sm font-bold">You are not in a department yet</div>
-          <p className="mt-1 text-[13px] text-slate2">
-            Tasks move between departments, so an admin needs to add you to one
-            before you can raise or receive them.
+          <div className="text-sm font-semibold">You are not in a department yet</div>
+          <p className="mt-1 text-sm text-slate2">
+            A role decides what you can see. A department decides which tasks reach
+            you — they are set separately.
+          </p>
+          <p className="mt-2 text-xs text-slate2">
+            Ask your admin to open <strong>Masters → Users</strong>, pick your name,
+            and tick a department on the <strong>Departments</strong> tab.
           </p>
         </div>
       </div>

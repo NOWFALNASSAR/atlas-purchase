@@ -178,10 +178,14 @@ export default function NewTask() {
             </p>
           </div>
         ) : (
-          <p className="text-sm text-bad">
-            You are not in a department or showroom. An admin needs to add you first
-            under Masters → Users.
-          </p>
+          <div className="rounded-md bg-bad/10 px-3 py-2.5 text-sm text-bad">
+            <div className="font-semibold">You are not in a department yet</div>
+            <p className="mt-0.5">
+              Your role is set, but a role and a department are separate things. Ask
+              your admin to open Masters → Users, pick your name, and tick a
+              department on the Departments tab.
+            </p>
+          </div>
         )}
 
         <div>
