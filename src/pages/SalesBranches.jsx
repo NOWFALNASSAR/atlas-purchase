@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { db, inr, lakh } from '../lib/db'
+import { db, inr, lakh, num } from '../lib/db'
 import { useEntity } from '../App'
 
 const SORTS = [
@@ -89,9 +89,9 @@ export default function SalesBranches() {
         <Stat label="Target" value={lakh(total.target)} />
         <Stat label="Achieved" value={lakh(total.achieved)} strong />
         <Stat label="Achievement"
-          value={total.target ? (total.achieved / total.target * 100).toFixed(1) + '%' : '—'} />
+          value={total.target ? num(total.achieved / total.target * 100, 1) + '%' : '—'} />
         <Stat label="Margin"
-          value={total.achieved ? (total.margin / total.achieved * 100).toFixed(1) + '%' : '—'} />
+          value={total.achieved ? num(total.margin / total.achieved * 100, 1) + '%' : '—'} />
       </div>
 
       <div className="flex gap-1 overflow-x-auto pb-1">
@@ -129,7 +129,7 @@ export default function SalesBranches() {
                     {growth !== null && (
                       <div className={'text-[11px] font-semibold ' +
                         (growth >= 0 ? 'text-good' : 'text-bad')}>
-                        {growth >= 0 ? '+' : ''}{growth.toFixed(0)}% vs last month
+                        {growth >= 0 ? '+' : ''}{num(growth)}% vs last month
                       </div>
                     )}
                   </div>

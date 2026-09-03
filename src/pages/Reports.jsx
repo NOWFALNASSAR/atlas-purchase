@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { db, inr, lakh, dt } from '../lib/db'
+import { db, inr, lakh, dt, num } from '../lib/db'
 import { useMe } from '../App'
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -163,7 +163,7 @@ export default function Reports() {
                       <td className="px-3 py-2.5 text-right">{t.qty}</td>
                       <td className="px-3 py-2.5 text-right font-semibold">{inr(t.purchase)}</td>
                       <td className="px-4 py-2.5 text-right text-slate2">
-                        {totalPurchase ? ((t.purchase / totalPurchase) * 100).toFixed(1) : 0}%
+                        {totalPurchase ? num((t.purchase / totalPurchase) * 100, 1) : 0}%
                       </td>
                     </tr>
                   ))}

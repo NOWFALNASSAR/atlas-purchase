@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { db, inr, lakh, dt } from '../lib/db'
+import { db, inr, lakh, dt, num } from '../lib/db'
 
 /**
  * Inventory reports with drill-down.
@@ -93,7 +93,7 @@ export default function Inventory() {
 
     setRows(Object.values(map)
       .map(g => ({ ...g, avg_margin: g.margin.length
-        ? +(g.margin.reduce((a, b) => a + b, 0) / g.margin.length).toFixed(1) : 0 }))
+        ? +num(g.margin.reduce((a, b) => a + b, 0) / g.margin.length, 1) : 0 }))
       .sort((a, b) => b[rate] - a[rate]))
     setLoading(false)
   }

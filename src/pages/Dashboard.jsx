@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { db, lakh, inr, dt, statusStyle } from '../lib/db'
+import { db, lakh, inr, dt, statusStyle, num } from '../lib/db'
 import { useMe, useEntity, useCan } from '../App'
 import EntityBar from '../components/EntityBar'
 
@@ -158,7 +158,9 @@ function ApprovalsBand({ me, entityId }) {
    ================================================================== */
 
 function PurchaseSection({ me, entityId, can }) {
-  const [state, setState] = useState({ loading: true })
+  const [state, setState] = useState({
+    loading: true, counts: {}, monthValue: 0, monthCount: 0, mine: [], byEntity: []
+  })
 
   useEffect(() => {
     let live = true
@@ -202,7 +204,7 @@ function PurchaseSection({ me, entityId, can }) {
 
   return (
     <Section title="Purchase" to="/orders" toLabel="All orders" loading={state.loading}>
-      {state.error ? <Broken what="orders" /> : (
+      {() => state.error ? <Broken what="orders" /> : (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Stat label="Bought this month" value={lakh(state.monthValue)}
@@ -274,7 +276,9 @@ function PurchaseSection({ me, entityId, can }) {
    ================================================================== */
 
 function StockSection({ can }) {
-  const [state, setState] = useState({ loading: true })
+  const [state, setState] = useState({
+    loading: true, qty: 0, value: 0, deadValue: 0, deadCount: 0, transit: 0, top: []
+  })
 
   useEffect(() => {
     let live = true
@@ -304,7 +308,7 @@ function StockSection({ can }) {
 
   return (
     <Section title="Stock" to="/inventory" toLabel="Open inventory" loading={state.loading}>
-      {state.error ? <Broken what="stock" /> : (
+      {() => state.error ? <Broken what="stock" /> : (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <Stat label="Stock value" value={lakh(state.value)}
@@ -348,7 +352,10 @@ function StockSection({ can }) {
    ================================================================== */
 
 function SalesSection({ entityId, can }) {
-  const [state, setState] = useState({ loading: true })
+  const [state, setState] = useState({
+    loading: true, today: 0, yesterday: 0, bills: 0,
+    mtd: 0, target: 0, pct: null, behind: []
+  })
 
   useEffect(() => {
     let live = true
@@ -384,29 +391,29 @@ function SalesSection({ entityId, can }) {
     return () => { live = false }
   }, [entityId])
 
-  const change = state.yesterday
+  const change = state.yesterday > 0
     ? ((state.today - state.yesterday) / state.yesterday) * 100
     : null
 
   return (
     <Section title="Sales" to="/sales" toLabel="Sales dashboard" loading={state.loading}>
-      {state.error ? <Broken what="sales" /> : (
+      {() => state.error ? <Broken what="sales" /> : (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <Stat label="Sold today" value={lakh(state.today)}
-              sub={change === null ? (state.bills || 0) + ' bills'
-                : `${change >= 0 ? '+' : ''}${change.toFixed(0)}% on yesterday`}
+              sub={change == null ? (state.bills || 0) + ' bills'
+                : `${change >= 0 ? '+' : ''}${num(change)}% on yesterday`}
               feature />
             <Stat label="Month to date" value={lakh(state.mtd)}
-              sub={state.pct === null ? 'no target set' : state.pct.toFixed(0) + '% of target'}
+              sub={state.pct == null ? 'no target set' : num(state.pct) + '% of target'}
               to="/sales/targets" />
           </div>
 
-          {state.pct !== null && (
+          {state.pct != null && (
             <div className="card p-4">
               <div className="mb-1.5 flex justify-between text-sm">
                 <span className="text-slate2">Against a target of {lakh(state.target)}</span>
-                <span className="font-semibold">{state.pct.toFixed(0)}%</span>
+                <span className="font-semibold">{num(state.pct)}%</span>
               </div>
               <div className="h-2 rounded-full bg-line2">
                 <div className={'h-2 rounded-full ' +
@@ -443,7 +450,9 @@ function SalesSection({ entityId, can }) {
    ================================================================== */
 
 function TasksSection() {
-  const [state, setState] = useState({ loading: true })
+  const [state, setState] = useState({
+    loading: true, open: 0, overdue: 0, unack: 0, urgent: []
+  })
 
   useEffect(() => {
     let live = true
@@ -469,7 +478,7 @@ function TasksSection() {
 
   return (
     <Section title="Tasks" to="/tasks" toLabel="All tasks" loading={state.loading}>
-      {state.error ? <Broken what="tasks" /> : (
+      {() => state.error ? <Broken what="tasks" /> : (
         <div className="space-y-3">
           <div className="grid grid-cols-3 gap-3">
             <Stat label="Open" value={state.open || 0} feature />
@@ -534,6 +543,13 @@ function SetupSection({ can }) {
    Shared pieces
    ================================================================== */
 
+/* `children` is a FUNCTION, not JSX.
+
+   This is deliberate. If it were plain JSX, JavaScript would build the
+   whole section — reading every figure — before this component got to
+   decide whether to show the skeleton instead. One unguarded number
+   would then throw during loading and blank the entire app. Passing a
+   function means nothing inside the section runs until the data is in. */
 function Section({ title, to, toLabel, loading, children }) {
   return (
     <section>
@@ -541,7 +557,7 @@ function Section({ title, to, toLabel, loading, children }) {
         <h2 className="text-base font-semibold tracking-tight">{title}</h2>
         <Link to={to} className="text-sm font-medium text-slate2 hover:text-ink">{toLabel}</Link>
       </div>
-      {loading ? <Skeleton /> : children}
+      {loading ? <Skeleton /> : children()}
     </section>
   )
 }

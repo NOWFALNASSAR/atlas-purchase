@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { db, inr, lakh, dt } from '../lib/db'
+import { db, inr, lakh, dt, num } from '../lib/db'
 import { useEntity } from '../App'
 
 /** Where sales stand today and this month, and which branches need attention. */
@@ -88,7 +88,7 @@ export default function SalesDashboard() {
                   <div className={'pb-1 text-[13px] font-semibold ' +
                     (todaySales >= yesterday ? 'text-good' : 'text-gold')}>
                     {todaySales >= yesterday ? '+' : ''}
-                    {(((todaySales - yesterday) / yesterday) * 100).toFixed(0)}% vs yesterday
+                    {num(((todaySales - yesterday) / yesterday) * 100)}% vs yesterday
                   </div>
                 )}
               </div>
@@ -107,7 +107,7 @@ export default function SalesDashboard() {
               {growth !== null && (
                 <span className={'text-[13px] font-semibold ' +
                   (growth >= 0 ? 'text-good' : 'text-bad')}>
-                  {growth >= 0 ? '+' : ''}{growth.toFixed(1)}% vs last month
+                  {growth >= 0 ? '+' : ''}{num(growth, 1)}% vs last month
                 </span>
               )}
             </div>
@@ -133,7 +133,7 @@ export default function SalesDashboard() {
                     style={{ width: Math.min(achievement, 100) + '%' }} />
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-                  <Mini label="Achievement" value={achievement.toFixed(1) + '%'} />
+                  <Mini label="Achievement" value={num(achievement, 1) + '%'} />
                   <Mini label="Balance" value={lakh(balance)} />
                   <Mini label={`Need daily (${daysLeft}d)`} value={inr(requiredDaily)} warn />
                 </div>

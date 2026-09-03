@@ -1,4 +1,4 @@
-import { useEffect, useState, createContext, useContext } from 'react'
+import { useEffect, useState, createContext, useContext, Component } from 'react'
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { db, roleLabel } from './lib/db'
 
@@ -279,7 +279,7 @@ function Shell({ me, can, children }) {
       <div className="transition-[padding] duration-200 md:pl-[var(--nav)]">
         <Header me={me} onMenu={() => setDrawer(true)} />
         <main className="px-4 py-5 pb-28 md:px-6 md:pb-8 lg:px-8 lg:py-7">
-          {children}
+          <Boundary key={pathname}>{children}</Boundary>
         </main>
       </div>
 
@@ -548,6 +548,39 @@ function Splash({ text }) {
       </div>
     </div>
   )
+}
+
+/* One broken figure on one page used to take down the whole app and leave
+   a white screen, which tells a shop manager nothing and tells you nothing
+   either. Now the page fails on its own, the menu still works, and the
+   error is on screen where someone can read it out over the phone.
+
+   Keyed on the route, so navigating away clears it. */
+class Boundary extends Component {
+  state = { err: null }
+  static getDerivedStateFromError(err) { return { err } }
+  componentDidCatch(err, info) { console.error('Page failed:', err, info) }
+
+  render() {
+    if (!this.state.err) return this.props.children
+    return (
+      <div className="page page-md">
+        <div className="card border-bad/40 p-5">
+          <h2 className="text-base font-semibold text-bad">This page could not open</h2>
+          <p className="mt-1.5 text-sm text-slate2">
+            The rest of the app still works — use the menu to go somewhere else.
+            If it keeps happening, send this message to whoever maintains Atlas.
+          </p>
+          <pre className="mt-3 overflow-x-auto rounded-md bg-paper p-3 text-xs text-ink">
+            {String(this.state.err?.message || this.state.err)}
+          </pre>
+          <button className="btn-ghost btn-sm mt-3" onClick={() => this.setState({ err: null })}>
+            Try again
+          </button>
+        </div>
+      </div>
+    )
+  }
 }
 
 /* Typing a URL should not get you into a page your rights do not cover.
