@@ -51,8 +51,17 @@ export default function Tasks() {
     setLoading(true)
     let sel = db.from('v_tasks').select('*').order('created_at', { ascending: false }).limit(300)
 
-    if (tab === 'inbox')  sel = sel.in('to_dept', myDepts)
-    if (tab === 'raised') sel = sel.in('from_dept', myDepts)
+    if (tab === 'inbox') sel = sel.in('to_dept', myDepts)
+
+    /* Anything you raised is yours, even if you raised it on behalf of a
+       department you have since left, or one you are not a member of.
+       Before this it filtered on department alone, so people could raise
+       a task and then not find it. */
+    if (tab === 'raised') {
+      sel = myDepts.length
+        ? sel.or(`raised_by.eq.${me.id},from_dept.in.(${myDepts.join(',')})`)
+        : sel.eq('raised_by', me.id)
+    }
     if (tab === 'open')   sel = sel.not('status', 'in', '("verified","cancelled")')
     if (tab === 'late')   sel = sel.or('overdue.eq.true,ack_overdue.eq.true')
 
@@ -73,7 +82,7 @@ export default function Tasks() {
 
   const TABS = [
     ['inbox',  'For my department'],
-    ['raised', 'We raised'],
+    ['raised', 'Raised by us'],
     ...(isMD ? [['open', 'All open'], ['late', 'Late']] : [])
   ]
 
@@ -147,7 +156,7 @@ export default function Tasks() {
                     <div className="mt-0.5 text-[11px] text-slate2">
                       <span className="font-mono">{t.task_no}</span>
                       {' · '}{t.from_dept_code} → {t.to_dept_code}
-                      {' · '}{t.raised_by_name}
+                      {' · '}{t.raised_by === me.id ? 'you' : t.raised_by_name}
                       {t.attachments > 0 && ` · ${t.attachments} attached`}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-2 text-[11px]">

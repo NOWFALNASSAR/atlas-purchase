@@ -27,12 +27,24 @@ export default function NewTask() {
       .then(({ data }) => setDepts(data || []))
 
     db.from('department_members')
-      .select('department_id, departments(id,name,code,kind)')
+      .select('department_id, post, departments(id,name,code,kind,is_md_office)')
       .eq('profile_id', me.id).eq('active', true)
       .then(({ data }) => {
-        const list = (data || []).map(d => d.departments).filter(Boolean)
+        /* Somebody in MD Office as well as their own department was
+           getting MD Office as the sender, because the rows come back in
+           whatever order the database feels like. Your own department is
+           what you raise from; MD Office goes last and is only the
+           default if it is the only one you are in. */
+        const list = (data || [])
+          .map(d => ({ ...d.departments, post: d.post }))
+          .filter(Boolean)
+          .sort((a, b) => (a.is_md_office ? 1 : 0) - (b.is_md_office ? 1 : 0))
+
         setMine(list)
-        if (list.length === 1) setF(v => ({ ...v, from_dept: list[0].id }))
+
+        const remembered = localStorage.getItem('taskFromDept')
+        const start = list.find(d => d.id === remembered) || list[0]
+        if (start) setF(v => ({ ...v, from_dept: start.id }))
       })
   }, [])
 
@@ -150,13 +162,20 @@ export default function NewTask() {
         {mine.length > 1 ? (
           <Picker label="From" placeholder="Which department or showroom is asking?"
             options={mine.map(label)}
-            value={f.from_dept} onChange={id => setF(v => ({ ...v, from_dept: id }))} />
+            value={f.from_dept}
+            onChange={id => {
+              localStorage.setItem('taskFromDept', id)
+              setF(v => ({ ...v, from_dept: id, to_dept: v.to_dept === id ? '' : v.to_dept }))
+            }} />
         ) : mine.length === 1 ? (
           <div>
             <label>From</label>
             <div className="rounded-md border border-line bg-paper px-3 py-2 text-[15px]">
               {mine[0].name}
             </div>
+            <p className="mt-1 text-2xs text-slate2">
+              Raised as {mine[0].name}, by you. It will show in your raised list.
+            </p>
           </div>
         ) : (
           <p className="text-sm text-bad">
