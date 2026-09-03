@@ -53,6 +53,7 @@ const Ico = ({ d, ...p }) => (
 )
 
 const ICONS = {
+  home:     <Ico d={<><path d="M4 10.6 12 4l8 6.6V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-8.4Z" /><path d="M9.5 20.5v-6h5v6" /></>} />,
   purchase: <Ico d={<><path d="M4 5h2l2.2 9.2a2 2 0 0 0 2 1.5h6.9a2 2 0 0 0 2-1.5L21 8H6.6" /><circle cx="10" cy="19.5" r="1.3" /><circle cx="18" cy="19.5" r="1.3" /></>} />,
   stock:    <Ico d={<><path d="M3.5 7.5 12 3.5l8.5 4v9L12 20.5l-8.5-4v-9Z" /><path d="M3.5 7.5 12 11.6l8.5-4.1M12 11.6v8.9" /></>} />,
   sales:    <Ico d={<><path d="M3.5 20V4" /><path d="M3.5 20H21" /><path d="m7 15.5 4-4.5 3.2 3 4.8-6" /></>} />,
@@ -70,11 +71,16 @@ const ChevIcon  = ({ open }) => (
 /* MODULES                                                             */
 /* ------------------------------------------------------------------ */
 
+/* The dashboard is not part of any module. It is the landing page, it is
+   open to everyone who can sign in, and it assembles itself from whatever
+   the person is allowed to see. Keeping it out of Purchase means a person
+   with only Sales rights no longer sees an empty Purchase menu. */
+const HOME = { to: '/', label: 'Dashboard', short: 'Home', end: true }
+
 const MODULES = [
   {
     key: 'purchase', label: 'Purchase', short: 'Buy',
     pages: [
-      { to: '/',            label: 'Dashboard',       short: 'Home', end: true },
       { to: '/orders',      label: 'Purchase orders', short: 'Orders',   perm: 'po.view' },
       { to: '/orders/new',  label: 'New order',       short: 'New',      perm: 'po.create' },
       { to: '/compare',     label: 'Rate compare',    short: 'Rates',    perm: 'compare.view' },
@@ -121,6 +127,7 @@ const MODULES = [
 ]
 
 const moduleFor = (path) => {
+  if (path === '/') return 'home'
   if (path.startsWith('/tasks')) return 'tasks'
   if (path.startsWith('/sales')) return 'sales'
   if (['/inventory', '/godown', '/transfers'].some(p => path.startsWith(p))) return 'stock'
@@ -133,6 +140,7 @@ const moduleAllowed = (mod, can) => mod.pages.some(p => allowed(p, can))
 const visiblePages = (mod, can) => (mod?.pages || []).filter(p => allowed(p, can))
 
 function titleFor(pathname) {
+  if (pathname === '/') return 'Dashboard'
   const mod = MODULES.find(m => m.key === moduleFor(pathname))
   const exact = mod?.pages.find(p => p.to === pathname)
   if (exact) return exact.label
@@ -307,6 +315,15 @@ function Sidebar({ can, collapsed, onToggle }) {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-3">
+        <NavLink to={HOME.to} end title={collapsed ? HOME.label : undefined}
+          className={({ isActive }) => 'nav-item ' + (isActive ? 'nav-item-on ' : '') +
+            (collapsed ? 'justify-center px-0' : '')}>
+          {ICONS.home}
+          {!collapsed && <span>{HOME.label}</span>}
+        </NavLink>
+
+        {!collapsed && <div className="!mt-3 border-t border-white/10 pt-2" />}
+
         {mods.map(m => {
           const pages = visiblePages(m, can)
           const on = current === m.key
@@ -368,6 +385,12 @@ function Drawer({ me, can, onClose }) {
         </div>
 
         <nav className="flex-1 space-y-2 overflow-y-auto px-2 py-2">
+          <NavLink to={HOME.to} end
+            className={({ isActive }) => 'nav-item ' + (isActive ? 'nav-item-on' : '')}>
+            {ICONS.home}
+            {HOME.label}
+          </NavLink>
+
           {MODULES.filter(m => moduleAllowed(m, can)).map(m => (
             <div key={m.key}>
               <div className="flex items-center gap-3 px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-white/40">
@@ -433,9 +456,15 @@ function Header({ me, onMenu }) {
         </div>
         <nav className="hidden min-w-0 flex-1 items-center gap-1.5 truncate text-sm md:flex"
           aria-label="Breadcrumb">
-          <span className="text-slate2">{moduleLabel}</span>
-          <span className="text-line">/</span>
-          <span className="font-semibold">{title}</span>
+          {pathname === '/' ? (
+            <span className="font-semibold">{title}</span>
+          ) : (
+            <>
+              <span className="text-slate2">{moduleLabel}</span>
+              <span className="text-line">/</span>
+              <span className="font-semibold">{title}</span>
+            </>
+          )}
         </nav>
 
         <div className="relative">
@@ -477,11 +506,18 @@ function Header({ me, onMenu }) {
 function BottomNav({ can }) {
   const { pathname } = useLocation()
   const current = moduleFor(pathname)
-  const pages = visiblePages(MODULES.find(m => m.key === current), can).slice(0, 5)
+  const mods = MODULES.filter(m => moduleAllowed(m, can))
+
+  /* On the dashboard the bar jumps between modules. Inside a module it
+     moves between that module's pages. Home is always the first tab, so
+     there is one fixed way back regardless of how deep you are. */
+  const items = current === 'home'
+    ? [HOME, ...mods.map(m => ({ to: visiblePages(m, can)[0].to, short: m.short }))]
+    : [HOME, ...visiblePages(MODULES.find(m => m.key === current), can)]
 
   return (
     <nav className="safe-b fixed inset-x-0 bottom-0 z-20 flex border-t border-line bg-white md:hidden">
-      {pages.map(p => (
+      {items.slice(0, 5).map(p => (
         <NavLink key={p.to} to={p.to} end={p.end}
           className={({ isActive }) =>
             'relative flex-1 py-3 text-center text-2xs font-semibold ' +
