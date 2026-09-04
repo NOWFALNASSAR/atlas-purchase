@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { db } from '../lib/db'
 import { useMe } from '../App'
 import Picker from '../components/Picker'
+import Field from '../components/Field'
 
 export default function NewPO() {
   const me = useMe()
@@ -97,35 +98,41 @@ export default function NewPO() {
   return (
     <div className="page page-sm space-y-5">
       <div>
-        <h1 className="text-xl font-bold">New purchase order</h1>
-        <p className="text-sm text-slate2">Supplier and type first, then add items and split them across shops.</p>
+        <h1 className="text-xl font-semibold tracking-tight lg:text-2xl">New purchase order</h1>
+        <p className="text-sm text-slate2">
+          Supplier and type first. Items and the shop split come next, once the
+          order exists.
+        </p>
       </div>
 
-      <div className="card space-y-4 p-4">
-        {locked ? (
-          <div>
-            <label>Entity</label>
+      <div className="space-y-3">
+        <Field n="1" title="Entity" required done={!!f.entity_id}
+          hint="Which company the order is raised under">
+          {locked ? (
             <div className="rounded-md border border-line bg-paper px-3 py-2 text-[15px]">
               {locked.name}
-              <span className="ml-2 font-mono text-[11px] text-slate2">{locked.code}</span>
+              <span className="ml-2 font-mono text-2xs text-slate2">{locked.code}</span>
             </div>
-          </div>
-        ) : (
-          <Picker label="Entity" placeholder="Choose entity"
-            options={entities.map(e => ({ id: e.id, label: e.name, sub: e.code }))}
-            value={f.entity_id} onChange={id => setF(v => ({ ...v, entity_id: id }))} />
-        )}
+          ) : (
+            <Picker label="" placeholder="Choose entity"
+              options={entities.map(e => ({ id: e.id, label: e.name, sub: e.code }))}
+              value={f.entity_id} onChange={id => setF(v => ({ ...v, entity_id: id }))} />
+          )}
+        </Field>
 
-        <Picker label="Supplier" placeholder="Search supplier master"
-          options={suppliers.map(s => ({
-            id: s.id, label: s.name,
-            sub: [s.code, s.credit_days ? s.credit_days + ' days credit' : null].filter(Boolean).join(' · ')
-          }))}
-          value={f.supplier_id} onChange={id => setF(v => ({ ...v, supplier_id: id }))} />
+        <Field n="2" title="Supplier" required done={!!f.supplier_id}
+          hint="Everything below opens once a supplier is chosen">
+          <Picker label="" placeholder="Search supplier master"
+            options={suppliers.map(s => ({
+              id: s.id, label: s.name,
+              sub: [s.code, s.credit_days ? s.credit_days + ' days credit' : null].filter(Boolean).join(' · ')
+            }))}
+            value={f.supplier_id} onChange={id => setF(v => ({ ...v, supplier_id: id }))} />
+        </Field>
 
         {f.supplier_id && (
-        <div>
-          <label>Purchase type</label>
+        <Field n="3" title="Purchase type" required done={!!f.purchase_type}
+          hint="What the targets are measured against">
           <select value={f.purchase_type}
             onChange={e => {
               if (e.target.value === '__new') return addType()
@@ -135,12 +142,12 @@ export default function NewPO() {
             {types.map(t => <option key={t} value={t}>{t}</option>)}
             {canAddType && <option value="__new">+ Add a new type…</option>}
           </select>
-        </div>
+        </Field>
         )}
 
         {f.supplier_id && (
-        <div>
-          <label>Goods will arrive at</label>
+        <Field n="4" title="Goods will arrive at" required done={!!f.receipt_mode}
+          hint="Godown first, or straight to one shop">
           <div className="grid grid-cols-2 gap-2">
             <button type="button"
               onClick={() => setF(v => ({ ...v, receipt_mode: 'godown', direct_shop_id: null }))}
@@ -165,44 +172,44 @@ export default function NewPO() {
               </span>
             </button>
           </div>
-        </div>
+        </Field>
         )}
 
         {f.supplier_id && f.receipt_mode === 'direct_shop' && (
-          <Picker label="Which shop" placeholder="Choose the shop"
-            options={shops.map(s => ({ id: s.id, label: s.name, sub: s.code }))}
-            value={f.direct_shop_id}
-            onChange={id => setF(v => ({ ...v, direct_shop_id: id }))} />
+          <Field n="5" title="Which shop" required done={!!f.direct_shop_id}
+            hint="Where the supplier delivers">
+            <Picker label="" placeholder="Choose the shop"
+              options={shops.map(s => ({ id: s.id, label: s.name, sub: s.code }))}
+              value={f.direct_shop_id}
+              onChange={id => setF(v => ({ ...v, direct_shop_id: id }))} />
+          </Field>
         )}
 
         {f.supplier_id && (
-        <div>
-          <label>Tax rate (default for all items)</label>
+        <Field n="6" title="Tax rate" done={f.tax_rate !== ''}
+          hint="Applied to every item. Change it per item later if it differs.">
           <select value={f.tax_rate}
             onChange={e => setF(v => ({ ...v, tax_rate: e.target.value }))}>
             {taxRates.map(r => <option key={r} value={r}>{r}%</option>)}
           </select>
-          <p className="mt-1 text-[11px] text-slate2">
-            You can change the rate on any individual item later.
-          </p>
-        </div>
+        </Field>
         )}
 
-        <div>
-          <label>Expected delivery</label>
+        <Field n="7" title="Expected delivery" done={!!f.expected_date}
+          hint="What lateness is measured against">
           <input type="date" value={f.expected_date}
             onChange={e => setF(v => ({ ...v, expected_date: e.target.value }))} />
-        </div>
+        </Field>
 
-        <div>
+        <Field n="8" title="Delivery and transport" done={!!(f.delivery_address || f.transporter)}
+          hint="Only needed when it is not the usual godown">
           <button type="button" onClick={() => setShowDelivery(x => !x)}
-            className="text-xs font-semibold text-gold underline">
-            {showDelivery ? '− Hide delivery details' : '+ Delivery address and transporter'}
+            className="text-xs font-semibold text-gold">
+            {showDelivery ? '− Hide' : '+ Add delivery address and transporter'}
           </button>
-        </div>
 
         {showDelivery && (
-          <div className="space-y-3 rounded-md bg-paper p-3">
+          <div className="mt-3 space-y-3 rounded-md bg-paper p-3">
             <div>
               <label>Deliver to</label>
               <textarea rows={2} value={f.delivery_address}
@@ -228,13 +235,14 @@ export default function NewPO() {
             </div>
           </div>
         )}
+        </Field>
 
-        <div>
-          <label>General remarks</label>
+        <Field n="9" title="Remarks" done={!!f.remarks}
+          hint="Anything the approver or the supplier should know">
           <textarea rows={2} value={f.remarks}
             onChange={e => setF(v => ({ ...v, remarks: e.target.value }))}
             placeholder="Urgent / festival stock / replacement order" />
-        </div>
+        </Field>
 
         <button className="btn-dark w-full" onClick={start} disabled={busy}>
           {busy ? 'Creating' : 'Start adding items'}
