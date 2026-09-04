@@ -1,0 +1,40 @@
+{
+  "packageId": "com.atlasmaharani.atlas",
+  "host": "REPLACE_WITH_YOUR_DOMAIN",
+  "name": "Atlas — Maharani Group",
+  "launcherName": "Atlas",
+  "display": "standalone",
+  "themeColor": "#0E1B2E",
+  "themeColorDark": "#0E1B2E",
+  "navigationColor": "#0E1B2E",
+  "navigationColorDark": "#0E1B2E",
+  "navigationDividerColor": "#0E1B2E",
+  "navigationDividerColorDark": "#0E1B2E",
+  "backgroundColor": "#0E1B2E",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://REPLACE_WITH_YOUR_DOMAIN/icons/icon-512.png",
+  "maskableIconUrl": "https://REPLACE_WITH_YOUR_DOMAIN/icons/maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "atlas"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    { "name": "Raise a task", "shortName": "Raise", "url": "/tasks/new",
+      "chosenIconUrl": "https://REPLACE_WITH_YOUR_DOMAIN/icons/icon-192.png" },
+    { "name": "New purchase order", "shortName": "New order", "url": "/orders/new",
+      "chosenIconUrl": "https://REPLACE_WITH_YOUR_DOMAIN/icons/icon-192.png" },
+    { "name": "End of day", "shortName": "EOD", "url": "/tasks/eod",
+      "chosenIconUrl": "https://REPLACE_WITH_YOUR_DOMAIN/icons/icon-192.png" }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://REPLACE_WITH_YOUR_DOMAIN/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "orientation": "portrait"
+}
