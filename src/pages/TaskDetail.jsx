@@ -4,7 +4,9 @@ import { db, dt, dtTime } from '../lib/db'
 import { useMe, useCan } from '../App'
 import TaskMedia from '../components/TaskMedia'
 import Picker from '../components/Picker'
-import { taskMessage, openWhatsApp } from '../lib/wa'
+import { taskMessage } from '../lib/wa'
+import SendPdfSheet from '../components/SendPdfSheet'
+import { buildTaskPdf } from '../lib/taskPdf'
 
 const LABEL = {
   raised: 'New', reissued: 'Reissued', acknowledged: 'Accepted',
@@ -30,12 +32,13 @@ export default function TaskDetail() {
   const [previous, setPrevious] = useState(null)
   const [mrf, setMrf] = useState(null)
   const [waNo, setWaNo] = useState(null)
+  const [sending, setSending] = useState(false)
+  const [mayEdit, setMayEdit] = useState(false)
   const [depts, setDepts] = useState([])
   const [myDepts, setMyDepts] = useState([])
   const [isMD, setIsMD] = useState(false)
 
   const [accept, setAccept] = useState(null)
-  const [assign, setAssign] = useState(null)
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [gone, setGone] = useState(false)
@@ -66,6 +69,7 @@ export default function TaskDetail() {
     setIsMD((dm.data || []).some(d => d.departments?.is_md_office))
     setDepts(dp.data || [])
     setMrf(mr.data || null)
+    db.rpc('can_edit_task', { p_task: id }).then(({ data }) => setMayEdit(data === true))
     setWaNo((dp.data || []).find(d => d.id === task.data.to_dept)?.whatsapp || null)
   }
 
@@ -87,11 +91,6 @@ export default function TaskDetail() {
                    (t.support_depts || []).length > 0       // supporting
   const open = !['verified', 'cancelled'].includes(t.status)
 
-  /* Editing, moving and cancelling a task belong to MD Office. Everyone
-     else raises an issue and MD Office decides. Keeps either side from
-     quietly making an awkward job disappear. */
-  const mayCancel   = can('tasks.cancel')   || isMD
-  const mayReassign = can('tasks.reassign') || isMD
 
   async function call(fn, args, ok) {
     setBusy(true)
@@ -134,12 +133,6 @@ export default function TaskDetail() {
       'Sent to MD Office to decide.')
   }
 
-  function doAssign() {
-    if (!assign?.dept) return alert('Pick the department')
-    if (!assign?.note?.trim()) return alert('Add a note saying why')
-    call('md_assign_task', { p_task: t.id, p_dept: assign.dept, p_note: assign.note })
-    setAssign(null)
-  }
 
   const donePoints = points.filter(p => p.done).length
 
@@ -364,39 +357,13 @@ export default function TaskDetail() {
         <TaskMedia taskId={t.id} editable={involved && open} />
       </section>
 
-      {/* ---------- actions ---------- */}
+      {/* ---------- doing the work ----------
+           Accepting, starting and finishing stay here, because they
+           belong to the people doing the job. Everything that CHANGES
+           the task — dates, department, cancelling — is on its own
+           screen, so nobody taps cancel while reading. */}
       <div className="space-y-2">
 
-        {/* MD Office settles a dispute */}
-        {mayReassign && t.status === 'disputed' && (
-          assign ? (
-            <div className="card space-y-3 p-4">
-              <h3 className="text-sm font-semibold">Who should do this?</h3>
-              <Picker label="Department" placeholder="Pick the department"
-                options={depts.map(d => ({
-                  id: d.id, label: d.name,
-                  sub: d.kind === 'showroom' ? 'Showroom' : d.code
-                }))}
-                value={assign.dept} onChange={id => setAssign(v => ({ ...v, dept: id }))} />
-              <div>
-                <label>Note — why it goes to them</label>
-                <textarea rows={2} value={assign.note}
-                  onChange={e => setAssign(v => ({ ...v, note: e.target.value }))} />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <button className="btn-dark" onClick={doAssign} disabled={busy}>Assign</button>
-                <button className="btn-ghost" onClick={() => setAssign(null)}>Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <button className="btn-gold w-full"
-              onClick={() => setAssign({ dept: t.disputed_from, note: '' })}>
-              Decide who does this
-            </button>
-          )
-        )}
-
-        {/* receiver accepts and sets dates */}
         {holding && ['raised', 'reissued'].includes(t.status) && (
           accept ? (
             <div className="card space-y-3 p-4">
@@ -461,45 +428,24 @@ export default function TaskDetail() {
           </>
         )}
 
-        {/* raiser checks the work */}
-        {asking && t.status === 'completed' && (
-          <div className="grid gap-2 sm:grid-cols-2">
-            <button className="btn-dark" disabled={busy}
-              onClick={() => call('verify_task', {
-                p_task: t.id, p_note: prompt('Any comment? (optional)') || null },
-                'Task closed')}>
-              Accept the work
-            </button>
-            <button className="btn-bad" disabled={busy}
-              onClick={() => {
-                const why = prompt('What is not acceptable?')
-                if (why?.trim()) call('reissue_task', { p_task: t.id, p_note: why })
-              }}>
-              Not OK — reissue
-            </button>
-          </div>
-        )}
-
-        {/* moving it on, outside of a dispute */}
-        {mayReassign && open && t.status !== 'disputed' && !assign && (
-          <button className="btn-ghost w-full"
-            onClick={() => setAssign({ dept: t.to_dept, note: '' })}>
-            Move to another department
+        {involved && open && (
+          <button className="btn-ghost w-full" onClick={() => setSending(true)}>
+            Send this task on WhatsApp
           </button>
         )}
 
-        {mayCancel && open ? (
-          <button className="btn-ghost w-full text-bad" disabled={busy}
-            onClick={() => {
-              const why = prompt('Why cancel this task?')
-              if (why?.trim()) call('cancel_task', { p_task: t.id, p_note: why })
-            }}>
-            Cancel task
-          </button>
-        ) : asking && open && t.status !== 'disputed' && (
-          <button className="btn-ghost w-full" disabled={busy} onClick={doDispute}>
-            Raise an issue with MD Office
-          </button>
+        {/* everything that changes the task lives elsewhere */}
+        {mayEdit && open && (
+          <Link to={`/tasks/${t.id}/manage`} className="btn-ghost w-full">
+            Manage this task
+          </Link>
+        )}
+
+        {!mayEdit && open && involved && (
+          <p className="text-center text-2xs text-slate2">
+            Need the dates moved, or this sent elsewhere? Add a note above — MD Office
+            reads it and makes the change.
+          </p>
         )}
       </div>
 
@@ -527,6 +473,20 @@ export default function TaskDetail() {
       <Link to="/tasks" className="block text-center text-sm font-medium text-slate2">
         Back to tasks
       </Link>
+
+      {sending && (
+        <SendPdfSheet
+          title={'Send ' + t.task_no}
+          filename={buildTaskPdf(t, points, notes, events, mrf).filename}
+          message={taskMessage(t, mrf)}
+          number={waNo}
+          numberLabel={t.to_dept_name}
+          build={() => buildTaskPdf(t, points, notes, events, mrf).blob}
+          bucket="po-pdfs"
+          folder={'tasks/' + t.id}
+          onClose={() => setSending(false)}
+        />
+      )}
     </div>
   )
 }
