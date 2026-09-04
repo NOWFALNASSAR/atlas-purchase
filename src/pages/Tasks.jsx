@@ -27,7 +27,13 @@ const PRIORITY = {
 export default function Tasks() {
   const me = useMe()
   const [sp, setSp] = useSearchParams()
-  const tab = sp.get('t') || 'inbox'
+  /* The dashboard cards link here with ?filter=… — map those onto the
+     tabs so a card and a tab are the same thing, not two systems. */
+  const FROM_CARD = {
+    mine: 'mine', dept: 'inbox', raised: 'raised', accept: 'accept',
+    overdue: 'late', progress: 'progress', review: 'review', closed: 'closed'
+  }
+  const tab = FROM_CARD[sp.get('filter')] || sp.get('t') || 'inbox'
   const [rows, setRows] = useState([])
   const [myDepts, setMyDepts] = useState([])
   const [isMD, setIsMD] = useState(false)
@@ -64,6 +70,12 @@ export default function Tasks() {
     }
     if (tab === 'open')   sel = sel.not('status', 'in', '("verified","cancelled")')
     if (tab === 'late')   sel = sel.or('overdue.eq.true,ack_overdue.eq.true')
+    if (tab === 'mine')   sel = sel.eq('assigned_to', me.id)
+                                   .not('status', 'in', '("verified","cancelled")')
+    if (tab === 'accept') sel = sel.in('status', ['raised', 'reissued'])
+    if (tab === 'progress') sel = sel.in('status', ['acknowledged', 'in_progress'])
+    if (tab === 'review') sel = sel.eq('status', 'completed')
+    if (tab === 'closed') sel = sel.eq('status', 'verified')
 
     const { data } = await sel
     setRows(data || []); setLoading(false)
