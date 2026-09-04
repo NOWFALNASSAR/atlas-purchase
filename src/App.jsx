@@ -2,6 +2,7 @@ import { useEffect, useState, createContext, useContext, Component } from 'react
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { db, roleLabel } from './lib/db'
 import NotificationBell from './components/NotificationBell'
+import { InstallProvider, useInstall, isStandalone } from './components/InstallPrompt'
 
 import Login     from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -32,6 +33,7 @@ import TaskReports    from './pages/TaskReports'
 import TaskSchedules  from './pages/TaskSchedules'
 import DeptPerformance from './pages/DeptPerformance'
 import Eod            from './pages/Eod'
+import MrfReport      from './pages/MrfReport'
 
 const Ctx = createContext(null)
 export const useMe = () => useContext(Ctx)
@@ -119,6 +121,7 @@ const MODULES = [
       { to: '/tasks/new',     label: 'Raise task',  short: 'Raise',   perm: 'tasks.create' },
       { to: '/tasks/eod',       label: 'End of day',      short: 'EOD',     perm: 'tasks.view' },
       { to: '/tasks/departments', label: 'Departments',   short: 'Depts',   perm: 'tasks.reports' },
+      { to: '/tasks/manpower',  label: 'Manpower',       short: 'MRF',     perm: 'tasks.mrf' },
       { to: '/tasks/reports',   label: 'Performance',    short: 'Reports', perm: 'tasks.reports' },
       { to: '/tasks/schedules', label: 'Recurring tasks', short: 'Repeat',  perm: 'tasks.schedules' }
     ]
@@ -216,6 +219,7 @@ export default function App() {
     <Ctx.Provider value={me}>
      <PermCtx.Provider value={can}>
      <EntityCtx.Provider value={{ entities, entityId, setEntityId: chooseEntity }}>
+      <InstallProvider>
       <Shell me={me} can={can}>
         <Routes>
           <Route path="/"                 element={<Dashboard />} />
@@ -243,6 +247,7 @@ export default function App() {
           <Route path="/tasks/schedules"  element={<Need p="tasks.schedules"><TaskSchedules /></Need>} />
           <Route path="/tasks/eod"        element={<Need p="tasks.view"><Eod /></Need>} />
           <Route path="/tasks/departments" element={<Need p="tasks.reports"><DeptPerformance /></Need>} />
+          <Route path="/tasks/manpower"   element={<Need p="tasks.mrf"><MrfReport /></Need>} />
           <Route path="/tasks/:id"        element={<Need p="tasks.view"><TaskDetail /></Need>} />
 
           <Route path="/suppliers"        element={<Need p="suppliers.view"><Suppliers /></Need>} />
@@ -253,6 +258,7 @@ export default function App() {
           <Route path="*"                 element={<Navigate to="/" />} />
         </Routes>
       </Shell>
+      </InstallProvider>
      </EntityCtx.Provider>
      </PermCtx.Provider>
     </Ctx.Provider>
@@ -292,6 +298,7 @@ function Shell({ me, can, children }) {
 
       <div className="transition-[padding] duration-200 md:pl-[var(--nav)]">
         <Header me={me} onMenu={() => setDrawer(true)} />
+        <OfflineBar />
         <main className="px-4 py-5 pb-28 md:px-6 md:pb-8 lg:px-8 lg:py-7">
           <Boundary key={pathname}>{children}</Boundary>
         </main>
@@ -505,6 +512,8 @@ function Header({ me, onMenu }) {
 <div className="truncate text-xs text-slate2">{me.username}</div>
                 <div className="mt-1.5 text-xs text-slate2">{roleLabel(me.role)}</div>
               </div>
+              <InstallMenuItem />
+
               <button className="w-full px-4 py-3 text-left text-sm font-medium hover:bg-paper"
                 onClick={async () => { await db.auth.signOut(); nav('/') }}>
                 Sign out
@@ -599,6 +608,45 @@ class Boundary extends Component {
   }
 }
 
+/* Always here, whatever the browser decides to offer. If Chrome has
+   given us a real prompt we use it; otherwise we explain what to tap. */
+function InstallMenuItem() {
+  const inst = useInstall()
+  if (!inst || inst.installed) return null
+
+  return (
+    <button
+      className="flex w-full items-center gap-2 border-b border-line px-4 py-3 text-left text-sm font-medium hover:bg-paper"
+      onClick={inst.canPrompt ? inst.install : inst.openHelp}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+        strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+        <path d="M12 3.5v11" /><path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
+        <path d="M4.5 17.5v1.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-1.5" />
+      </svg>
+      Install app
+    </button>
+  )
+}
+
+function OfflineBar() {
+  const [off, setOff] = useState(!navigator.onLine)
+  useEffect(() => {
+    const on = () => setOff(false), down = () => setOff(true)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', down)
+    return () => {
+      window.removeEventListener('online', on)
+      window.removeEventListener('offline', down)
+    }
+  }, [])
+  if (!off) return null
+  return (
+    <div className="sticky top-14 z-30 bg-bad px-4 py-1.5 text-center text-xs font-semibold text-white">
+      No internet. You can read what is already loaded, but nothing will save.
+    </div>
+  )
+}
+
 /* Typing a URL should not get you into a page your rights do not cover.
    This is politeness, not security — RLS is the security. */
 function Need({ p, children }) {
@@ -622,6 +670,7 @@ const LEGACY = {
   'insights.view':   ['manager', 'hod', 'admin'],
   'sales.import':    ['manager', 'hod', 'admin'],
   'tasks.schedules': ['admin'],
+  'tasks.mrf':       ['admin', 'hod'],
   'suppliers.view':  ['hod', 'admin'],
   'suppliers.edit':  ['hod', 'admin'],
   'items.view':      ['hod', 'admin'],
