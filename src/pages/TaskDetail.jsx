@@ -477,7 +477,8 @@ export default function TaskDetail() {
       {sending && (
         <SendPdfSheet
           title={'Send ' + t.task_no}
-          filename={buildTaskPdf(t, points, notes, events, mrf).filename}
+          /* derived, not built — see the note in PODetail */
+          filename={(t.task_no || 'task').replace(/\//g, '-') + '.pdf'}
           message={taskMessage(t, mrf)}
           number={waNo}
           numberLabel={t.to_dept_name}

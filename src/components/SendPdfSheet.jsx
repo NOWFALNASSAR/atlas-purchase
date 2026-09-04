@@ -32,9 +32,18 @@ export default function SendPdfSheet({
 
   const canAttach = canShareFiles()
 
+  /* Every path goes through here, and every caller catches. A PDF that
+     fails to build should say so in the sheet, never take the page down
+     with it — losing the whole screen because one document would not
+     render is a bad trade. */
   async function blob() {
-    const b = await build()
-    if (!b) throw new Error('The PDF could not be built')
+    let b
+    try {
+      b = await build()
+    } catch (e) {
+      throw new Error('The PDF could not be built: ' + (e?.message || e))
+    }
+    if (!b) throw new Error('The PDF came back empty. Check the order has items.')
     return b
   }
 

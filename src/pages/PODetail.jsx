@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { db, inr, dt, dtTime, statusStyle, roleLabel, margin } from '../lib/db'
-import { downloadPoPdf, uploadPoPdf, buildPoPdf, poMessage, whatsappLink } from '../lib/pdf'
+import { downloadPoPdf, buildPoPdf, poMessage } from '../lib/pdf'
+import SendPdfSheet from '../components/SendPdfSheet'
+import { uploadPdfForLink, copyText } from '../lib/share'
 import { useMe } from '../App'
 import ItemEditor from '../components/ItemEditor'
 
@@ -14,6 +16,7 @@ export default function PODetail() {
   const [lines, setLines] = useState([])
   const [allocs, setAllocs] = useState([])
   const [items, setItems] = useState([])
+  const [sending, setSending] = useState(false)
   const [shops, setShops] = useState([])
   const [history, setHistory] = useState([])
   const [company, setCompany] = useState({})
@@ -77,11 +80,30 @@ export default function PODetail() {
   const reject  = () => { const n = prompt('Reason for rejecting:'); if (n?.trim()) call('reject_po', { p_po: po.id, p_note: n }) }
   const reopen  = () => call('reopen_po', { p_po: po.id })
 
-  function sendWhatsapp() {
-    downloadPoPdf(po, lines, allocs, company)
-    window.open(whatsappLink(po.suppliers?.whatsapp || po.suppliers?.mobile, poMessage(po, company)), '_blank')
-    call('mark_sent', { p_po: po.id, p_channel: 'whatsapp' })
+  /* The old version downloaded the PDF and opened WhatsApp with text
+     only, which left the person to find the file and attach it by hand.
+     The sheet below either attaches the real file through the phone's
+     share sheet, or uploads it and puts a link in the message. */
+  /* This button existed in the JSX but the function was never written,
+     so evaluating it threw ReferenceError and the whole page went blank
+     for any approved order. Here it is. */
+  async function copyLink() {
+    setBusy(true)
+    try {
+      const { blob, filename } = buildPoPdf(po, lines, allocs, company)
+      const url = await uploadPdfForLink({
+        blob, filename, bucket: 'po-pdfs', folder: po.id
+      })
+      await db.from('purchase_orders').update({ pdf_url: url }).eq('id', po.id)
+      alert(await copyText(url)
+        ? 'PDF link copied. Paste it anywhere.'
+        : 'Could not copy automatically. The link is:\n\n' + url)
+    } catch (e) {
+      alert('Could not upload the PDF: ' + e.message)
+    }
+    setBusy(false)
   }
+
   function sendEmail() {
     downloadPoPdf(po, lines, allocs, company)
     const subject = `Purchase Order ${po.po_no} — ${company.name || 'Atlas Maharani Group'}`
@@ -238,20 +260,36 @@ export default function PODetail() {
         )}
         {canSend && (
           <>
-            <button className="btn-dark w-full" onClick={sendWhatsapp} disabled={busy}>
-              {busy ? 'Preparing PDF' : 'Send PDF on WhatsApp'}
+            <button className="btn-dark w-full" onClick={() => setSending(true)} disabled={busy}>
+              Send PDF on WhatsApp
             </button>
             <div className="grid grid-cols-2 gap-2">
               <button className="btn-ghost" onClick={sendEmail} disabled={busy}>Send by email</button>
               <button className="btn-ghost" onClick={copyLink} disabled={busy}>Copy PDF link</button>
             </div>
-            <p className="text-center text-xs text-slate2">
-              On a phone the PDF attaches itself to the message. On a laptop the
-              message carries a link the supplier can tap to open the PDF.
-            </p>
           </>
         )}
       </div>
+
+      {sending && (
+        <SendPdfSheet
+          title={'Send ' + (po.po_no || 'order')}
+          /* The filename is derived, not taken off a built PDF.
+             This used to call buildPoPdf() during render purely to read
+             .filename — which built the entire document on every render,
+             and if it threw for any reason React unmounted the page and
+             the sheet appeared not to open at all. */
+          filename={'PO-' + (po.po_no || 'draft').replace(/[\/\\]/g, '-') + '.pdf'}
+          message={poMessage(po, company)}
+          number={po.suppliers?.whatsapp || po.suppliers?.mobile}
+          numberLabel={po.suppliers?.name}
+          build={() => buildPoPdf(po, lines, allocs, company).blob}
+          bucket="po-pdfs"
+          folder={po.id}
+          onSent={ch => call('mark_sent', { p_po: po.id, p_channel: ch })}
+          onClose={() => setSending(false)}
+        />
+      )}
 
       {/* audit */}
       <div className="card p-4">
