@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { db, inr, margin, dt } from '../lib/db'
 import Picker from './Picker'
+import QuickAddItem from './QuickAddItem'
 import PhotoStrip from './PhotoStrip'
 import ShopSplit from './ShopSplit'
 
@@ -13,6 +14,10 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
   const [allocs, setAllocs] = useState([])
   const [taxRates, setTaxRates] = useState([0, 5, 12, 18, 28])
   const [saving, setSaving] = useState(false)
+  const [adding, setAdding] = useState(false)
+  /* Items created from inside this line, kept locally so the picker
+     sees them without mutating the array the parent owns. */
+  const [extraItems, setExtraItems] = useState([])
 
   useEffect(() => { setF(line); setAllocQty(line.qty || 0) }, [line.id])
 
@@ -43,7 +48,10 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
   const lineTax = Math.round(lineValue * (Number(f.tax_rate) || 0)) / 100
 
   function pickItem(id) {
-    const it = items.find(i => i.id === id)
+    // must look in both — an item added from this line is not in the
+    // parent's list until the page reloads
+    const it = [...extraItems, ...items].find(i => i.id === id)
+    if (!it) return
     setF(v => ({
       ...v, item_id: id, item_name: it.name, item_code: it.code,
       model_no: it.model_no || '', selling_rate: v.selling_rate || it.std_selling || 0
@@ -133,9 +141,33 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
       </div>
 
       <div className="space-y-3">
-        <Picker label="Item" placeholder="Search item master"
-          options={items.map(i => ({ id: i.id, label: i.name, sub: `${i.code}${i.model_no ? ' · ' + i.model_no : ''}` }))}
-          value={f.item_id} onChange={pickItem} />
+        <div>
+          <Picker label="Item" placeholder="Search item master"
+            options={[...extraItems, ...items].map(i => ({
+              id: i.id, label: i.name,
+              sub: `${i.code}${i.model_no ? ' · ' + i.model_no : ''}`
+            }))}
+            value={f.item_id} onChange={pickItem} />
+
+          {/* §36 — adding an item must not mean abandoning the order */}
+          <button type="button" onClick={() => setAdding(true)}
+            className="mt-1 text-xs font-semibold text-gold">
+            + Add a new item
+          </button>
+        </div>
+
+        {adding && (
+          <QuickAddItem
+            onClose={() => setAdding(false)}
+            onCreated={item => {
+              setExtraItems(x => [item, ...x])
+              setF(v => ({
+                ...v, item_id: item.id, item_name: item.name, item_code: item.code,
+                selling_rate: v.selling_rate || item.std_selling || 0
+              }))
+              setAdding(false)
+            }} />
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div><label>Colour</label>

@@ -5,6 +5,30 @@ import { useMe } from '../App'
 import Picker from '../components/Picker'
 import TaskMedia from '../components/TaskMedia'
 
+/* §7 — every field as its own card.
+   On a phone a single long form is a wall of inputs and people skip
+   things. A numbered card per field means somebody can see at a glance
+   what they have and have not filled in. */
+function Field({ n, title, hint, children, required, done }) {
+  return (
+    <section className={'card p-4 transition ' + (done ? 'border-good/40' : '')}>
+      <div className="mb-2 flex items-start gap-2.5">
+        <span className={'grid h-6 w-6 shrink-0 place-items-center rounded-full text-2xs font-bold ' +
+          (done ? 'bg-good text-white' : 'bg-paper text-slate2')}>
+          {done ? '✓' : n}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">
+            {title}{required && <span className="ml-1 text-bad">*</span>}
+          </span>
+          {hint && <span className="block text-2xs text-slate2">{hint}</span>}
+        </span>
+      </div>
+      <div className="pl-[34px]">{children}</div>
+    </section>
+  )
+}
+
 export default function NewTask() {
   const me = useMe()
   const nav = useNavigate()
@@ -187,9 +211,11 @@ export default function NewTask() {
         </p>
       </div>
 
-      <div className="card space-y-4 p-4">
+      <div className="space-y-3">
+        <Field n="1" title="From" required done={!!f.from_dept}
+          hint="Which department or showroom is asking">
         {mine.length > 1 ? (
-          <Picker label="From" placeholder="Which department or showroom is asking?"
+          <Picker label="" placeholder="Which department or showroom is asking?"
             options={mine.map(label)}
             value={f.from_dept}
             onChange={id => {
@@ -198,7 +224,6 @@ export default function NewTask() {
             }} />
         ) : mine.length === 1 ? (
           <div>
-            <label>From</label>
             <div className="rounded-md border border-line bg-paper px-3 py-2 text-[15px]">
               {mine[0].name}
             </div>
@@ -216,35 +241,33 @@ export default function NewTask() {
             </p>
           </div>
         )}
+        </Field>
 
-        <div>
-          <Picker label="Answerable department" placeholder="Who is responsible for this?"
+        <Field n="2" title="Answerable department" required done={!!f.to_dept}
+          hint="One department only. They accept it, they finish it, they answer for it.">
+          <Picker label="" placeholder="Who is responsible for this?"
             options={others.map(label)}
             value={f.to_dept}
             onChange={id => setF(v => ({
               ...v, to_dept: id, assigned_to: null,
               support: v.support.filter(x => x !== id)
             }))} />
-          <p className="mt-1 text-2xs text-slate2">
-            One department only. They accept it, they finish it, they answer for it.
-          </p>
-        </div>
+        </Field>
 
         {people.length > 0 && (
-          <Picker label="Person (optional)" placeholder="Anyone in that department"
-            options={people.map(p => ({ id: p.id, label: p.name, sub: p.post }))}
-            value={f.assigned_to} onChange={id => setF(v => ({ ...v, assigned_to: id }))}
-            allowEmpty />
+          <Field n="3" title="Assign to" done={!!f.assigned_to}
+            hint="Optional — leave blank and anyone in that department can pick it up">
+            <Picker label="" placeholder="Anyone in that department"
+              options={people.map(p => ({ id: p.id, label: p.name, sub: p.post }))}
+              value={f.assigned_to} onChange={id => setF(v => ({ ...v, assigned_to: id }))}
+              allowEmpty />
+          </Field>
         )}
 
         {/* supporting departments */}
         {f.to_dept && (
-          <div>
-            <label>Also involved (optional)</label>
-            <p className="mb-2 text-2xs text-slate2">
-              They see the task and can add notes, but the answerable department above
-              is the one on the hook.
-            </p>
+          <Field n="4" title="Also involved" done={f.support.length > 0}
+            hint="They see it and can add notes. The answerable department above is still the one on the hook.">
             <div className="max-h-52 overflow-y-auto rounded-md border border-line">
               {supportable.map(d => (
                 <label key={d.id}
@@ -263,11 +286,11 @@ export default function NewTask() {
                 {f.support.length} department{f.support.length > 1 ? 's' : ''} supporting.
               </p>
             )}
-          </div>
+          </Field>
         )}
 
-        <div>
-          <label>What kind of task</label>
+        <Field n="5" title="What kind of task" done={f.task_type !== 'general'}
+          hint="Picking MRF opens the manpower form">
           <select value={f.task_type}
             onChange={e => {
               const v = e.target.value
@@ -289,7 +312,7 @@ export default function NewTask() {
               what the salary or the date is.
             </p>
           )}
-        </div>
+        </Field>
 
         {f.task_type === 'mrf' && (
           <div className="rounded-lg border border-gold/40 bg-gold2/50 p-3.5">
@@ -377,27 +400,23 @@ export default function NewTask() {
           </div>
         )}
 
-        <div>
-          <label>What needs doing *</label>
+        <Field n="6" title="Task heading" required done={!!f.title.trim()}
+          hint="Short and specific. This is what appears in every list.">
           <input value={f.title} maxLength={140}
             onChange={e => setF(v => ({ ...v, title: e.target.value }))}
-            placeholder="Short and specific" />
-        </div>
+            placeholder="Verify supplier outstanding for August" />
+          <p className="mt-1 text-right text-2xs text-slate2">{f.title.length}/140</p>
+        </Field>
 
-        <div>
-          <label>Details</label>
+        <Field n="7" title="Description" done={!!f.details}
+          hint="Anything the other department needs in order to start">
           <textarea rows={4} value={f.details}
-            onChange={e => setF(v => ({ ...v, details: e.target.value }))}
-            placeholder="Anything the other department needs to know" />
-        </div>
+            onChange={e => setF(v => ({ ...v, details: e.target.value }))} />
+        </Field>
 
         {/* sub-points */}
-        <div>
-          <label>Sub-points (optional)</label>
-          <p className="mb-2 text-2xs text-slate2">
-            Break the job into steps they tick off. A ticked list is how you know the
-            work was done, not just marked done.
-          </p>
+        <Field n="8" title="Sub-points" done={points.some(x => x.trim())}
+          hint="Break the job into steps they tick off. A ticked list is how you know work was done, not just marked done.">
           <div className="space-y-2">
             {points.map((p, i) => (
               <div key={i} className="flex gap-2">
@@ -414,25 +433,28 @@ export default function NewTask() {
           <button type="button" className="btn-ghost btn-sm mt-2" onClick={addPoint}>
             Add a step
           </button>
-        </div>
+        </Field>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label>Priority</label>
-            <select value={f.priority}
-              onChange={e => setF(v => ({ ...v, priority: e.target.value }))}>
-              <option value="low">Low</option>
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
-            </select>
+        <Field n="9" title="Priority and date" done={!!f.due_date}
+          hint="The date is what overdue is measured against">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label>Priority</label>
+              <select value={f.priority}
+                onChange={e => setF(v => ({ ...v, priority: e.target.value }))}>
+                <option value="low">Low</option>
+                <option value="normal">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Critical</option>
+              </select>
+            </div>
+            <div>
+              <label>Completion date</label>
+              <input type="date" value={f.due_date}
+                onChange={e => setF(v => ({ ...v, due_date: e.target.value }))} />
+            </div>
           </div>
-          <div>
-            <label>Needed by</label>
-            <input type="date" value={f.due_date}
-              onChange={e => setF(v => ({ ...v, due_date: e.target.value }))} />
-          </div>
-        </div>
+        </Field>
 
         <button className="btn-dark w-full" onClick={create} disabled={busy || !mine.length}>
           {busy ? 'Raising' : 'Raise task'}
