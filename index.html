@@ -3,7 +3,51 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0E1B2E" /><!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0E1B2E" />
+    <meta name="description" content="Purchase, stock, sales and tasks for the Atlas Maharani Group." />
+
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" href="/icons/favicon.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
+    <!-- iPhone ignores the manifest, so it needs these separately -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Atlas" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <title>Atlas</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+
+    <!--
+      Registering the service worker here rather than only in main.jsx.
+      Chrome refuses to offer "Install app" without one — it falls back
+      to "Add to Home screen", which is just a bookmark with an icon.
+      Keeping it in this file means installability depends on one file
+      instead of two.
+    -->
+    <script>
+      if ('serviceWorker' in navigator && location.protocol === 'https:') {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js').catch(function (e) {
+            console.warn('Service worker did not register:', e)
+          })
+        })
+      }
+    </script>
+  </body>
+</html>
+
     <meta name="description" content="Purchase orders, approvals, stock and supplier rates for the Atlas Maharani Group." />
 
     <!-- Added to home screen on a phone, this makes it open without
