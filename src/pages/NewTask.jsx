@@ -245,24 +245,38 @@ export default function NewTask() {
         {f.to_dept && (
           <Field n="4" title="Also involved" done={f.support.length > 0}
             hint="They see it and can add notes. The answerable department above is still the one on the hook.">
-            <div className="max-h-52 overflow-y-auto rounded-md border border-line">
-              {supportable.map(d => (
-                <label key={d.id}
-                  className="flex cursor-pointer items-center gap-2.5 border-b border-line px-3 py-2 last:border-0 hover:bg-paper">
-                  <input type="checkbox" className="!w-auto"
-                    checked={f.support.includes(d.id)} onChange={() => toggleSupport(d.id)} />
-                  <span className="text-sm">{d.name}</span>
-                  {d.kind === 'showroom' && (
-                    <span className="tag bg-line text-slate2">showroom</span>
-                  )}
-                </label>
-              ))}
-            </div>
+            {/* Same picker as the answerable department above, so the two
+                fields behave alike. Chosen ones drop below as chips, since
+                more than one can be involved. */}
+            <Picker label="" placeholder="Add a department or showroom"
+              options={supportable
+                .filter(d => !f.support.includes(d.id))
+                .map(label)}
+              value={null}
+              onChange={id => id && toggleSupport(id)} />
+
             {f.support.length > 0 && (
-              <p className="mt-1 text-2xs text-slate2">
-                {f.support.length} department{f.support.length > 1 ? 's' : ''} supporting.
-              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {f.support.map(id => {
+                  const d = depts.find(x => x.id === id)
+                  if (!d) return null
+                  return (
+                    <button key={id} type="button" onClick={() => toggleSupport(id)}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-line
+                                 bg-paper px-2.5 py-1.5 text-sm hover:border-bad hover:text-bad">
+                      {d.name}
+                      <span className="text-slate2">✕</span>
+                    </button>
+                  )
+                })}
+              </div>
             )}
+
+            <p className="mt-1.5 text-2xs text-slate2">
+              {f.support.length === 0
+                ? 'Leave empty if nobody else needs to see it.'
+                : `${f.support.length} supporting. Tap one to remove it.`}
+            </p>
           </Field>
         )}
 

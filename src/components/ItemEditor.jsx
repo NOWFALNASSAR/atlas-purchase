@@ -149,10 +149,12 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
             }))}
             value={f.item_id} onChange={pickItem} />
 
-          {/* §36 — adding an item must not mean abandoning the order */}
+          {/* §36 — adding an item must not mean abandoning the order.
+              A full-width button, because at a supplier's counter this
+              is tapped as often as the picker above it. */}
           <button type="button" onClick={() => setAdding(true)}
-            className="mt-1 text-xs font-semibold text-gold">
-            + Add a new item
+            className="btn-gold mt-2 w-full">
+            + Add a new item to the master
           </button>
         </div>
 
@@ -169,12 +171,9 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
             }} />
         )}
 
-        <div className="grid grid-cols-2 gap-3">
-          <div><label>Colour</label>
-            <input value={f.colour || ''} onChange={e => setF(v => ({ ...v, colour: e.target.value }))} /></div>
-          <div><label>Size</label>
-            <input value={f.size || ''} onChange={e => setF(v => ({ ...v, size: e.target.value }))} /></div>
-        </div>
+        {/* Colour and size are hidden. The columns are still in the
+            database and anything already saved keeps its value — this
+            only takes them off the form. */}
 
         <div><label>Total quantity bought</label>
           <input type="number" inputMode="numeric" value={f.qty || ''}
