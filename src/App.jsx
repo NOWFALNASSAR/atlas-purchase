@@ -33,7 +33,6 @@ import TaskReports    from './pages/TaskReports'
 import TaskSchedules  from './pages/TaskSchedules'
 import DeptPerformance from './pages/DeptPerformance'
 import Eod            from './pages/Eod'
-import MrfReport      from './pages/MrfReport'
 
 const Ctx = createContext(null)
 export const useMe = () => useContext(Ctx)
@@ -121,7 +120,6 @@ const MODULES = [
       { to: '/tasks/new',     label: 'Raise task',  short: 'Raise',   perm: 'tasks.create' },
       { to: '/tasks/eod',       label: 'End of day',      short: 'EOD',     perm: 'tasks.view' },
       { to: '/tasks/departments', label: 'Departments',   short: 'Depts',   perm: 'tasks.reports' },
-      { to: '/tasks/manpower',  label: 'Manpower',       short: 'MRF',     perm: 'tasks.mrf' },
       { to: '/tasks/reports',   label: 'Performance',    short: 'Reports', perm: 'tasks.reports' },
       { to: '/tasks/schedules', label: 'Recurring tasks', short: 'Repeat',  perm: 'tasks.schedules' }
     ]
@@ -247,7 +245,6 @@ export default function App() {
           <Route path="/tasks/schedules"  element={<Need p="tasks.schedules"><TaskSchedules /></Need>} />
           <Route path="/tasks/eod"        element={<Need p="tasks.view"><Eod /></Need>} />
           <Route path="/tasks/departments" element={<Need p="tasks.reports"><DeptPerformance /></Need>} />
-          <Route path="/tasks/manpower"   element={<Need p="tasks.mrf"><MrfReport /></Need>} />
           <Route path="/tasks/:id"        element={<Need p="tasks.view"><TaskDetail /></Need>} />
 
           <Route path="/suppliers"        element={<Need p="suppliers.view"><Suppliers /></Need>} />
