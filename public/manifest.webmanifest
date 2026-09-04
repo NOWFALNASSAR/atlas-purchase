@@ -1,0 +1,29 @@
+{
+  "name": "Atlas — Maharani Group",
+  "short_name": "Atlas",
+  "description": "Purchase, stock, sales and tasks for the Atlas Maharani Group.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0E1B2E",
+  "theme_color": "#0E1B2E",
+  "lang": "en-IN",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Raise a task", "short_name": "Raise", "url": "/tasks/new",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "New purchase order", "short_name": "New order", "url": "/orders/new",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "End of day", "short_name": "EOD", "url": "/tasks/eod",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
