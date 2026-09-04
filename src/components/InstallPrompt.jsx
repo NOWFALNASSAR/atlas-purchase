@@ -133,6 +133,72 @@ function Banner() {
 
 /* ---------- what to tap, on whatever they are using ---------- */
 
+/* Chrome will not say why it refuses to install, and reading that out
+   of DevTools needs a laptop. So the app checks the three things Chrome
+   checks and shows the answer here. */
+function Diagnosis() {
+  const { canPrompt } = useInstall()
+  const [state, setState] = useState(null)
+
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      const out = { manifest: 'checking', sw: 'checking', https: location.protocol === 'https:' }
+
+      const link = document.querySelector('link[rel="manifest"]')
+      if (!link) out.manifest = 'no link in the page'
+      else {
+        try {
+          const r = await fetch(link.href)
+          out.manifest = r.ok ? 'ok' : 'not found (' + r.status + ')'
+        } catch { out.manifest = 'could not load' }
+      }
+
+      if (!('serviceWorker' in navigator)) out.sw = 'not supported here'
+      else {
+        const reg = await navigator.serviceWorker.getRegistration()
+        out.sw = reg ? (reg.active ? 'ok' : 'starting up') : 'not registered'
+      }
+
+      if (live) setState(out)
+    })()
+    return () => { live = false }
+  }, [])
+
+  if (!state) return null
+
+  const Row = ({ label, value, good }) => (
+    <div className="flex items-center justify-between gap-3 py-1">
+      <span className="text-slate2">{label}</span>
+      <span className={'font-semibold ' + (good ? 'text-good' : 'text-bad')}>{value}</span>
+    </div>
+  )
+
+  const allGood = state.manifest === 'ok' && state.sw === 'ok' && state.https
+
+  return (
+    <div className="mt-4 rounded-md bg-paper px-3 py-2.5 text-xs">
+      <div className="mb-1 font-semibold text-ink">What this device sees</div>
+      <Row label="Secure connection" value={state.https ? 'ok' : 'not https'} good={state.https} />
+      <Row label="App details file" value={state.manifest} good={state.manifest === 'ok'} />
+      <Row label="Background worker" value={state.sw} good={state.sw === 'ok'} />
+      <Row label="Browser offered install" value={canPrompt ? 'yes' : 'not yet'} good={canPrompt} />
+      {allGood && !canPrompt && (
+        <p className="mt-2 text-slate2">
+          Everything is in place. Chrome sometimes waits until you have used the
+          site a little. Use it for a minute, then reopen this.
+        </p>
+      )}
+      {state.sw === 'not registered' && (
+        <p className="mt-2 text-bad">
+          This is the problem. The page is not switching on the background worker,
+          so Chrome will only offer a shortcut.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function HowTo({ onClose }) {
   const kind = browserKind()
 
@@ -231,6 +297,8 @@ function HowTo({ onClose }) {
         </div>
 
         <div className="space-y-1 text-sm text-slate2">{steps.body}</div>
+
+        <Diagnosis />
 
         {kind !== 'inapp' && (
           <p className="mt-4 rounded-md bg-paper px-3 py-2.5 text-xs text-slate2">
