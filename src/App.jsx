@@ -7,6 +7,7 @@ import { InstallProvider, useInstall, isStandalone } from './components/InstallP
 import Login     from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import PurchaseDashboard from './pages/PurchaseDashboard'
+import PurchaseTargets  from './pages/PurchaseTargets'
 import POList    from './pages/POList'
 import NewPO     from './pages/NewPO'
 import PODetail  from './pages/PODetail'
@@ -96,6 +97,7 @@ const MODULES = [
       { to: '/orders/new',  label: 'New order',       short: 'New',      perm: 'po.create' },
       { to: '/compare',     label: 'Rate compare',    short: 'Rates',    perm: 'compare.view' },
       { to: '/reports',     label: 'Order reports',   short: 'Reports',  perm: 'reports.view' },
+      { to: '/purchase/targets', label: 'Targets',    short: 'Targets',  perm: 'purchase.targets' },
       { to: '/insights',    label: 'Insights',        short: 'Insights', perm: 'insights.view' }
     ]
   },
@@ -234,6 +236,7 @@ export default function App() {
           <Route path="/orders/:id"       element={<Need p="po.view"><PODetail /></Need>} />
           <Route path="/compare"          element={<Need p="compare.view"><Compare /></Need>} />
           <Route path="/reports"          element={<Need p="reports.view"><Reports /></Need>} />
+          <Route path="/purchase/targets" element={<Need p="purchase.targets"><PurchaseTargets /></Need>} />
           <Route path="/insights"         element={<Need p="insights.view"><Insights /></Need>} />
 
           <Route path="/inventory"        element={<Need p="inventory.view"><Inventory /></Need>} />
@@ -681,6 +684,7 @@ const LEGACY = {
   'tasks.mrf':       ['admin', 'hod'],
   'tasks.pfd':       ['admin', 'hod', 'manager', 'executive', 'accounts'],
   'tasks.score':     ['admin', 'hod', 'manager'],
+  'purchase.targets':['admin', 'hod', 'manager'],
   'suppliers.view':  ['hod', 'admin'],
   'suppliers.edit':  ['hod', 'admin'],
   'items.view':      ['hod', 'admin'],
