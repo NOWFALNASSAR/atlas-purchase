@@ -31,6 +31,7 @@ import TaskHome       from './pages/TaskHome'
 import NewTask        from './pages/NewTask'
 import TaskDetail     from './pages/TaskDetail'
 import TaskReports    from './pages/TaskReports'
+import Performance    from './pages/Performance'
 import TaskSchedules  from './pages/TaskSchedules'
 import TaskManage     from './pages/TaskManage'
 import DeptPerformance from './pages/DeptPerformance'
@@ -125,6 +126,7 @@ const MODULES = [
       { to: '/tasks/pfd',       label: 'Plan for the day', short: 'PFD',    perm: 'tasks.pfd' },
       { to: '/tasks/eod',       label: 'End of day',      short: 'EOD',     perm: 'tasks.view' },
       { to: '/tasks/departments', label: 'Departments',   short: 'Depts',   perm: 'tasks.reports' },
+      { to: '/tasks/score',     label: 'Scores',         short: 'Score',   perm: 'tasks.score' },
       { to: '/tasks/reports',   label: 'Performance',    short: 'Reports', perm: 'tasks.reports' },
       { to: '/tasks/schedules', label: 'Recurring tasks', short: 'Repeat',  perm: 'tasks.schedules' }
     ]
@@ -247,6 +249,7 @@ export default function App() {
           <Route path="/tasks"            element={<Need p="tasks.view"><TaskHome /></Need>} />
           <Route path="/tasks/list"       element={<Need p="tasks.view"><Tasks /></Need>} />
           <Route path="/tasks/new"        element={<Need p="tasks.create"><NewTask /></Need>} />
+          <Route path="/tasks/score"      element={<Need p="tasks.score"><Performance /></Need>} />
           <Route path="/tasks/reports"    element={<Need p="tasks.reports"><TaskReports /></Need>} />
           <Route path="/tasks/schedules"  element={<Need p="tasks.schedules"><TaskSchedules /></Need>} />
           <Route path="/tasks/pfd"        element={<Need p="tasks.pfd"><Pfd /></Need>} />
@@ -677,6 +680,7 @@ const LEGACY = {
   'tasks.schedules': ['admin'],
   'tasks.mrf':       ['admin', 'hod'],
   'tasks.pfd':       ['admin', 'hod', 'manager', 'executive', 'accounts'],
+  'tasks.score':     ['admin', 'hod', 'manager'],
   'suppliers.view':  ['hod', 'admin'],
   'suppliers.edit':  ['hod', 'admin'],
   'items.view':      ['hod', 'admin'],

@@ -188,9 +188,13 @@ export default function TaskHome() {
             <Tile to="/tasks/departments" label="Departments"
               hint="Everything each department does" />
           )}
+          {can('tasks.score') && (
+            <Tile to="/tasks/score" label="Scores"
+              hint="Out of ten, with strengths and what to fix" />
+          )}
           {can('tasks.reports') && (
-            <Tile to="/tasks/reports" label="Performance"
-              hint="Raised against closed, by department" />
+            <Tile to="/tasks/reports" label="Reports"
+              hint="Raised against closed, register, end of day" />
           )}
           <Tile to="/tasks/list" label="Every task" hint="The full list, filterable" />
         </div>
