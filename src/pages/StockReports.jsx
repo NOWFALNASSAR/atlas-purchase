@@ -16,6 +16,7 @@ import { db, lakh, inr, dt, num } from '../lib/db'
 
 const TABS = [
   ['overview',  'Overview'],
+  ['shop',      'By shop'],
   ['ageing',    'Ageing'],
   ['division',  'Divisions'],
   ['type',      'Purchase type'],
@@ -30,30 +31,43 @@ const TABS = [
 
 export default function StockReports() {
   const [tab, setTab] = useState('overview')
+  const [shop, setShop] = useState('all')
+  const [shops, setShops] = useState([])
   const [data, setData] = useState({})
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(null)
   const [q, setQ] = useState('')
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [shop])
 
   async function load() {
     setLoading(true)
     try {
-      const [snap, ageing, divi, ptype, sup, dead, slow, spread, anom, items, sups] =
+      // every stock view carries snapshot_shop, so one filter does them all
+      const only = qb => (shop === 'all' ? qb : qb.eq('snapshot_shop', shop))
+
+      const [snap, ageing, divi, ptype, sup, dead, slow, spread, anom, items, sups, byShop] =
         await Promise.all([
           db.from('stock_snapshots').select('*').order('taken_on', { ascending: false }).limit(1),
-          db.from('v_stock_ageing').select('*').order('sort_order'),
-          db.from('v_stock_by_division_now').select('*').order('value', { ascending: false }),
-          db.from('v_stock_by_purchase_type').select('*').order('value', { ascending: false }),
-          db.from('v_stock_by_supplier_now').select('*').order('value', { ascending: false }).limit(200),
-          db.from('v_dead_barcodes').select('*').order('value_at_cost', { ascending: false }).limit(500),
-          db.from('v_slow_movers').select('*').order('value_at_cost', { ascending: false }).limit(500),
+          shop === 'all'
+            ? db.from('v_stock_ageing_all').select('*').order('sort_order')
+            : db.from('v_stock_ageing').select('*').eq('snapshot_shop', shop).order('sort_order'),
+          only(db.from('v_stock_by_division_now').select('*'))
+            .order('value', { ascending: false }),
+          only(db.from('v_stock_by_purchase_type').select('*'))
+            .order('value', { ascending: false }),
+          only(db.from('v_stock_by_supplier_now').select('*'))
+            .order('value', { ascending: false }).limit(200),
+          only(db.from('v_dead_barcodes').select('*'))
+            .order('value_at_cost', { ascending: false }).limit(500),
+          only(db.from('v_slow_movers').select('*'))
+            .order('value_at_cost', { ascending: false }).limit(500),
           db.from('v_price_spread').select('*').order('value', { ascending: false }).limit(300),
-          db.from('v_stock_anomalies').select('*').limit(200),
+          only(db.from('v_stock_anomalies').select('*')).limit(200),
           // the unified master, the same rows purchase orders use
           db.from('items').select('*').eq('active', true).order('name').limit(500),
-          db.from('suppliers').select('*').eq('active', true).order('name').limit(500)
+          db.from('suppliers').select('*').eq('active', true).order('name').limit(500),
+          db.from('v_stock_by_shop').select('*').order('value', { ascending: false })
         ])
 
       if (snap.error) throw snap.error
@@ -63,8 +77,10 @@ export default function StockReports() {
         ageing: ageing.data || [], division: divi.data || [], ptype: ptype.data || [],
         supplier: sup.data || [], dead: dead.data || [], slow: slow.data || [],
         spread: spread.data || [], anomaly: anom.data || [],
-        items: items.data || [], suppliers: sups.data || []
+        items: items.data || [], suppliers: sups.data || [],
+        byShop: byShop.data || []
       })
+      setShops((byShop.data || []).map(r => r.shop).filter(Boolean))
       setFailed(null)
     } catch (e) {
       setFailed(e.message)
@@ -86,7 +102,7 @@ export default function StockReports() {
     const wb = XLSX.utils.book_new()
     const add = (name, rows) => rows?.length &&
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), name.slice(0, 31))
-    add('Ageing', data.ageing); add('Divisions', data.division)
+    add('By shop', data.byShop); add('Ageing', data.ageing); add('Divisions', data.division)
     add('Purchase types', data.ptype); add('Suppliers', data.supplier)
     add('Dead stock', data.dead); add('Slow movers', data.slow)
     add('Price spread', data.spread); add('Check these', data.anomaly)
@@ -119,7 +135,15 @@ export default function StockReports() {
               : 'From the stock master exported by the billing software'}
           </p>
         </div>
-        <button className="btn-ghost btn-sm" onClick={exportExcel}>Excel</button>
+        <div className="flex flex-wrap gap-2">
+          {shops.length > 1 && (
+            <select className="!w-auto" value={shop} onChange={e => setShop(e.target.value)}>
+              <option value="all">All shops</option>
+              {shops.map(sh => <option key={sh} value={sh}>{sh}</option>)}
+            </select>
+          )}
+          <button className="btn-ghost btn-sm" onClick={exportExcel}>Excel</button>
+        </div>
       </div>
 
       {nothing && (
@@ -157,6 +181,16 @@ export default function StockReports() {
           </div>
 
           {tab === 'overview' && <Overview data={data} totals={totals} />}
+
+          {tab === 'shop' && (
+            <Table head={['Shop', 'Barcodes', 'Pieces', 'Value', 'Sell-through']}
+              align="lrrrr"
+              rows={(data.byShop || []).map(r => [
+                r.shop, Number(r.barcodes).toLocaleString('en-IN'),
+                Math.round(r.pieces).toLocaleString('en-IN'),
+                lakh(r.value), num(r.avg_sell_through, 1) + '%'
+              ])} />
+          )}
 
           {tab === 'ageing' && (
             <Table head={['Age', 'Barcodes', 'Pieces', 'Value', 'Share']}

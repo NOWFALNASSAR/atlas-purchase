@@ -21,9 +21,29 @@ import { writeFileSync, readFileSync } from 'fs'
 /* SheetJS's ESM build has no readFile in Node — it expects a buffer. */
 const readBook = (path, opts) => XLSX.read(readFileSync(path), { type: 'buffer', ...opts })
 
-const [stockPath, itemPath, supplierPath] = process.argv.slice(2)
+/* Which shop this file is for.
+
+   This matters more than it looks. Without it every shop's file is
+   stored as "no shop", they all collide on the one-snapshot-per-day
+   rule, and each upload silently deletes the one before it. Ten shops
+   would leave you with one.
+
+     node scripts/import-masters.mjs NILAMBUR_STOCK.xlsx --shop NILAMBUR
+
+   Leave --shop off only for a company-wide or godown file. */
+const args = process.argv.slice(2)
+const shopAt = args.indexOf('--shop')
+const shop = shopAt >= 0 ? String(args[shopAt + 1] || '').trim().toUpperCase() : null
+/* When --shop is absent, shopAt is -1, and "i !== shopAt + 1" becomes
+   "i !== 0" — which quietly drops the filename. Only skip those two
+   positions when the flag is actually there. */
+const paths = shopAt >= 0
+  ? args.filter((_, i) => i !== shopAt && i !== shopAt + 1)
+  : args
+const [stockPath, itemPath, supplierPath] = paths
+
 if (!stockPath) {
-  console.error('\n  node scripts/import-masters.mjs STOCK.xlsx [ITEM.xls] [SUPPLIER.xls]\n')
+  console.error('\n  node scripts/import-masters.mjs STOCK.xlsx [ITEM.xls] [SUPPLIER.xls] [--shop NILAMBUR]\n')
   process.exit(1)
 }
 
@@ -134,8 +154,15 @@ const stock = XLSX.utils.sheet_to_json(sheet)
    So they are added together: quantities and value summed, everything
    else taken from the first row. Unit cost is recomputed from the
    combined figures rather than carried over from one of the parts. */
+/* Some of these exports end with a totals row — blank barcode, totals
+   in the quantity and amount columns. Counting it doubles the file. */
+const body = stock.filter(r => String(r.BarCode ?? '').trim() !== '')
+if (body.length !== stock.length) {
+  console.log(`  ignored ${stock.length - body.length} totals row(s) at the bottom`)
+}
+
 const merged = new Map()
-for (const r of stock) {
+for (const r of body) {
   const key = `${r.BarCode}|${r.PurRefNo}`
   const prev = merged.get(key)
   if (!prev) {
@@ -148,8 +175,8 @@ for (const r of stock) {
   }
 }
 const mergedRows = [...merged.values()]
-if (mergedRows.length !== stock.length) {
-  console.log(`  merged ${stock.length - mergedRows.length} split rows into their batch`)
+if (mergedRows.length !== body.length) {
+  console.log(`  merged ${body.length - mergedRows.length} split rows into their batch`)
 }
 
 /* A full godown master includes barcodes at zero stock. They matter:
@@ -206,9 +233,17 @@ out.push(`\n-- stock snapshot: ${lines.length} barcodes, ${Math.round(pieces)} p
 // Clear any snapshot already loaded for today before making a new one,
 // so re-running this part starts clean instead of colliding with the
 // unique index. stock_lines cascade away with it.
-out.push(`delete from stock_snapshots where taken_on = current_date and shop_id is null;`)
-out.push(`insert into stock_snapshots (taken_on, source_file, rows_loaded, total_pieces, total_value)
-values (current_date, ${q(stockPath.split('/').pop())}, ${lines.length}, ${pieces.toFixed(2)}, ${value.toFixed(2)});`)
+// scoped to this shop, so loading Perinthalmanna does not wipe Nilambur
+out.push(shop
+  ? `delete from stock_snapshots where taken_on = current_date and shop_code = ${q(shop)};`
+  : `delete from stock_snapshots where taken_on = current_date and shop_code is null;`)
+
+out.push(`insert into stock_snapshots (taken_on, source_file, shop_code, shop_id,
+  rows_loaded, total_pieces, total_value)
+select current_date, ${q(stockPath.split('/').pop())}, ${q(shop)},
+       (select id from shops where upper(btrim(name)) = ${q(shop)}
+           or upper(btrim(code)) = ${q(shop)} limit 1),
+       ${lines.length}, ${pieces.toFixed(2)}, ${value.toFixed(2)};`)
 
 // barcodes — one row per batch, updated if seen before
 // barcodes: EVERY row, with or without stock
@@ -252,7 +287,7 @@ for (let i = 0; i < sl.length; i += 400) {
      barcodes insert above works without casts. */
   out.push(`insert into stock_lines (snapshot_id, barcode, purchase_ref, item_code, item_name,
   supplier_code, division_code, qty_received, qty_on_hand, stock_pct, value_at_cost,
-  unit_cost, sale_price, arrival_date, days_held, purchase_type)
+  unit_cost, sale_price, arrival_date, days_held, purchase_type, shop_code, shop_id)
 select s.id,
        v.barcode,
        v.purchase_ref::int,
@@ -268,12 +303,17 @@ select s.id,
        v.sale_price::numeric,
        v.arrival_date::date,
        v.days_held::int,
-       v.purchase_type
+       v.purchase_type,
+       ${q(shop)},
+       s.shop_id
 from (values\n  ${sl.slice(i, i + 400).join(',\n  ')}
 ) as v(barcode, purchase_ref, item_code, item_name, supplier_code, division_code,
        qty_received, qty_on_hand, stock_pct, value_at_cost, unit_cost, sale_price,
        arrival_date, days_held, purchase_type)
-cross join (select id from stock_snapshots order by created_at desc limit 1) s;`)
+cross join (select id from stock_snapshots
+             where taken_on = current_date
+               and coalesce(shop_code, '~') = coalesce(${q(shop)}, '~')
+             order by created_at desc limit 1) s;`)
 }
 
 // link the masters up now that both sides are loaded
@@ -380,7 +420,8 @@ parts.forEach((body, i) => {
                 [...head, ...clean, ...tail].join('\n'))
 })
 
-console.log(`\n  ${parts.length} files written: import-${stamp}-part01.sql … part${String(parts.length).padStart(2,'0')}.sql`)
+console.log(`\n  ${shop ? shop : 'company-wide / godown'}`)
+console.log(`  ${parts.length} files written: import-${stamp}-part01.sql … part${String(parts.length).padStart(2,'0')}.sql`)
 console.log(`  ${lines.length.toLocaleString('en-IN')} barcodes, ` +
             `${Math.round(pieces).toLocaleString('en-IN')} pieces, ` +
             `₹${(value / 1e7).toFixed(2)} crore at cost`)

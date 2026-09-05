@@ -76,10 +76,21 @@ export default function StockUpload() {
         throw new Error('No BarCode column. Is this a stock analysis export?')
       }
 
+      /* Five of the nine shop exports end with a totals row: blank
+         barcode, with the day's totals sitting in the quantity and
+         amount columns. Counting it doubles the shop exactly — KADS
+         read as ₹2.04 Cr when the file says ₹1.02 Cr.
+
+         Dropped on a blank barcode rather than by position, because
+         four of the files have no totals row at all and dropping their
+         last line would lose a real batch. */
+      const body = rows.filter(r => String(r.BarCode ?? '').trim() !== '')
+      const totalRows = rows.length - body.length
+
       /* the same batch can appear on more than one row, split by
          quantity — added together, not dropped */
       const merged = new Map()
-      for (const r of rows) {
+      for (const r of body) {
         const key = `${r.BarCode}|${r.PurRefNo}`
         const prev = merged.get(key)
         if (!prev) {
@@ -95,7 +106,7 @@ export default function StockUpload() {
       const value = withStock.reduce((s, r) => s + r.Amount, 0)
 
       setParsed({
-        all, withStock, merged: rows.length - all.length,
+        all, withStock, totalRows, merged: body.length - all.length,
         zeroStock: all.length - withStock.length,
         pieces, value,
         divisions: [...new Set(all.map(r => Number(r.DiviCode)).filter(Number.isFinite))],
@@ -309,6 +320,12 @@ export default function StockUpload() {
             </div>
           )}
 
+          {parsed.totalRows > 0 && (
+            <div className="border-t border-line px-4 py-2.5 text-xs text-slate2">
+              {parsed.totalRows} totals {parsed.totalRows === 1 ? 'row' : 'rows'} at the
+              bottom of the sheet ignored. Counting them would have doubled this shop.
+            </div>
+          )}
           {parsed.merged > 0 && (
             <div className="border-t border-line px-4 py-2.5 text-xs text-slate2">
               {parsed.merged} rows were the same batch split in two — added together
