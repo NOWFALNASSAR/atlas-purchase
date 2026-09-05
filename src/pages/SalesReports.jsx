@@ -56,7 +56,7 @@ export default function SalesReports() {
     const only = qb => (br ? qb.eq('branch_code', br) : qb)
 
     try {
-      const [day, people, items, divi, sup, tax, cust, ret, trend] = await Promise.all([
+      const [day, people, items, divi, sup, tax, cust, ret, below, trend] = await Promise.all([
         only(db.from('v_sales_day_full').select('*').eq('sale_date', date)),
         only(db.from('v_salesman_performance').select('*').eq('sale_date', date))
           .order('value_extax', { ascending: false }),
