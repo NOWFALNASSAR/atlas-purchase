@@ -40,7 +40,7 @@ export default function StockUpload() {
   async function boot() {
     const [sh, snaps] = await Promise.all([
       db.from('shops').select('id,code,name').eq('active', true).order('name'),
-      db.from('stock_snapshots').select('*').order('taken_on', { ascending: false }).limit(30)
+      db.from('v_stock_snapshots_status').select('*').limit(30)
     ])
     setShops(sh.data || [])
     setRecent(snaps.data || [])
@@ -338,21 +338,34 @@ export default function StockUpload() {
 
       <section>
         <h2 className="mb-2 text-sm font-semibold">Stock loaded so far</h2>
+        <p className="mb-2 text-2xs text-slate2">
+          A green dot means the file counts towards stock value. A grey one means it is
+          used to classify sales but not counted — otherwise a godown file and the
+          branch files would count the same goods twice.
+        </p>
         {recent.length === 0 ? (
           <div className="card p-6 text-center text-sm text-slate2">Nothing uploaded yet.</div>
         ) : (
           <ul className="card divide-y divide-line">
-            {recent.map(r => (
-              <li key={r.id} className="flex items-center gap-3 px-4 py-3">
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-good" />
+            {recent.map((r, i) => (
+              <li key={i} className="flex items-center gap-3 px-4 py-3">
+                <span className={'h-2.5 w-2.5 shrink-0 rounded-full ' +
+                  (r.counts_as_stock ? 'bg-good' : 'bg-line2')} />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium">
-                    {r.shop_code || 'Company-wide / godown'} · {dt(r.taken_on)}
+                    {r.shop === '(no shop)' ? 'Company-wide / godown' : r.shop}
+                    {' · '}{dt(r.taken_on)}
                   </span>
                   <span className="block truncate text-2xs text-slate2">
                     {Number(r.rows_loaded).toLocaleString('en-IN')} rows ·{' '}
                     {lakh(r.total_value)} · {r.source_file}
                   </span>
+                  {!r.counts_as_stock && (
+                    <span className="mt-0.5 block text-2xs text-gold">
+                      Used to classify sales only — not added to the stock figures,
+                      because the branch files already hold these goods.
+                    </span>
+                  )}
                 </span>
               </li>
             ))}
