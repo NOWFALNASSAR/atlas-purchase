@@ -62,13 +62,17 @@ export default function SalesReports() {
           .order('value_extax', { ascending: false }),
         only(db.from('sales_barcode_daily').select('*').eq('sale_date', date))
           .order('value_extax', { ascending: false }).limit(1000),
-        db.from('v_sales_division').select('*').order('value_extax', { ascending: false }),
-        db.from('v_sales_supplier').select('*').order('value_extax', { ascending: false }).limit(100),
+        // these three used to ignore the pickers entirely
+        only(db.from('v_sales_division').select('*').eq('sale_date', date))
+          .order('value_extax', { ascending: false }),
+        only(db.from('v_sales_supplier').select('*').eq('sale_date', date))
+          .order('value_extax', { ascending: false }).limit(100),
         only(db.from('v_sales_tax').select('*').eq('sale_date', date)),
-        db.from('v_customers').select('*').order('spent', { ascending: false }).limit(300),
+        only(db.from('v_customers').select('*')).order('spent', { ascending: false }).limit(300),
         only(db.from('v_sales_returns').select('*').eq('sale_date', date)),
         only(db.from('v_sales_below_cost').select('*').eq('sale_date', date)),
-        db.from('v_sales_day_full').select('*').order('sale_date', { ascending: false }).limit(60)
+        only(db.from('v_sales_day_full').select('*'))
+          .order('sale_date', { ascending: false }).limit(60)
       ])
       setD(x => ({
         ...x,
@@ -140,8 +144,8 @@ export default function SalesReports() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight lg:text-2xl">Sales</h1>
           <p className="text-sm text-slate2">
-            {date ? dt(date) : ''}{branch !== 'all' && ' · ' + branch}
-            {' · everything without tax unless it says otherwise'}
+            {date ? dt(date) : ''} · {branch === 'all' ? 'all branches' : branch}
+            {' · without tax unless it says otherwise'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -180,6 +184,14 @@ export default function SalesReports() {
               ))}
             </div>
           </div>
+
+          <p className="text-2xs text-slate2">
+            {tab === 'customers'
+              ? `Everyone who has shopped at ${branch === 'all' ? 'any branch' : branch}, across all dates.`
+              : tab === 'trend'
+                ? `The last 60 days at ${branch === 'all' ? 'all branches' : branch}.`
+                : `${dt(date)} · ${branch === 'all' ? 'all branches' : branch}`}
+          </p>
 
           {tab === 'day' && (
             <Table head={['Branch', 'Bills', 'Without tax', 'With tax', 'Tax', 'Basket', 'Margin', 'Margin %']}
