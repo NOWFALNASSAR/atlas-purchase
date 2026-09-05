@@ -23,6 +23,7 @@ import Godown    from './pages/Godown'
 import Transfers from './pages/Transfers'
 import Inventory from './pages/Inventory'
 import StockReports from './pages/StockReports'
+import StockUpload  from './pages/StockUpload'
 import SalesDashboard from './pages/SalesDashboard'
 import SalesReports   from './pages/SalesReports'
 import SalesUpload    from './pages/SalesUpload'
@@ -109,6 +110,7 @@ const MODULES = [
     pages: [
       { to: '/inventory',  label: 'Inventory', short: 'Stock',     perm: 'inventory.view' },
       { to: '/stock/reports', label: 'Stock reports', short: 'Reports', perm: 'stock.reports' },
+      { to: '/stock/upload',  label: 'Upload stock',  short: 'Upload',  perm: 'stock.import' },
       { to: '/godown',     label: 'Godown',    short: 'Godown',    perm: 'godown.view' },
       { to: '/transfers',  label: 'Transfers', short: 'Transfers', perm: 'transfers.view' }
     ]
@@ -247,6 +249,7 @@ export default function App() {
 
           <Route path="/inventory"        element={<Need p="inventory.view"><Inventory /></Need>} />
           <Route path="/stock/reports"    element={<Need p="stock.reports"><StockReports /></Need>} />
+          <Route path="/stock/upload"     element={<Need p="stock.import"><StockUpload /></Need>} />
           <Route path="/godown"           element={<Need p="godown.view"><Godown /></Need>} />
           <Route path="/transfers"        element={<Need p="transfers.view"><Transfers /></Need>} />
 
@@ -698,6 +701,7 @@ const LEGACY = {
   'sales.reports':   ['admin', 'hod', 'manager', 'accounts'],
   'sales.targets':   ['admin', 'hod', 'manager'],
   'sales.import':    ['admin'],
+  'stock.import':    ['admin'],
   'suppliers.view':  ['hod', 'admin'],
   'suppliers.edit':  ['hod', 'admin'],
   'items.view':      ['hod', 'admin'],
