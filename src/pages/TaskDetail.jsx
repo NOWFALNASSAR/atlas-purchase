@@ -6,6 +6,7 @@ import TaskMedia from '../components/TaskMedia'
 import Picker from '../components/Picker'
 import { taskMessage } from '../lib/wa'
 import SendPdfSheet from '../components/SendPdfSheet'
+import AskSheet from '../components/AskSheet'
 import { buildTaskPdf } from '../lib/taskPdf'
 
 const LABEL = {
@@ -33,7 +34,9 @@ export default function TaskDetail() {
   const [mrf, setMrf] = useState(null)
   const [waNo, setWaNo] = useState(null)
   const [sending, setSending] = useState(false)
+  const [ask, setAsk] = useState(null)   // which confirmation sheet is open
   const [mayEdit, setMayEdit] = useState(false)
+  const [notice, setNotice] = useState(null)
   const [depts, setDepts] = useState([])
   const [myDepts, setMyDepts] = useState([])
   const [isMD, setIsMD] = useState(false)
@@ -44,6 +47,12 @@ export default function TaskDetail() {
   const [gone, setGone] = useState(false)
 
   useEffect(() => { load() }, [id])
+
+  useEffect(() => {
+    if (!notice) return
+    const t = setTimeout(() => setNotice(null), 4000)
+    return () => clearTimeout(t)
+  }, [notice])
 
   async function load() {
     const [task, ev, cl, nt, prev, dm, dp, mr] = await Promise.all([
@@ -96,8 +105,8 @@ export default function TaskDetail() {
     setBusy(true)
     const { error } = await db.rpc(fn, args)
     setBusy(false)
-    if (error) return alert(error.message)
-    if (ok) alert(ok)
+    if (error) throw new Error(error.message)
+    if (ok) setNotice(ok)
     load()
   }
 
@@ -118,19 +127,32 @@ export default function TaskDetail() {
     load()
   }
 
-  function doAccept() {
-    if (!accept?.start || !accept?.finish) return alert('Give both dates')
-    call('acknowledge_task', {
-      p_task: t.id, p_start: accept.start, p_finish: accept.finish,
-      p_note: accept.note || null
-    })
-    setAccept(null)
+  async function doAccept() {
+    if (!accept?.start || !accept?.finish) return setNotice('Give both dates')
+    if (accept.finish < accept.start) return setNotice('Finish cannot be before start')
+    try {
+      await call('acknowledge_task', {
+        p_task: t.id, p_start: accept.start, p_finish: accept.finish,
+        p_note: accept.note || null
+      }, 'Accepted. ' + t.from_dept_name + ' can see the dates you promised.')
+      setAccept(null)
+    } catch (e) {
+      setNotice(e.message)
+    }
   }
 
   function doDispute() {
-    const why = prompt('Why does this belong to another department?')
-    if (why?.trim()) call('dispute_task', { p_task: t.id, p_reason: why },
-      'Sent to MD Office to decide.')
+    setAsk({
+      key: 'dispute',
+      title: 'Not our department\u2019s work',
+      message: 'It goes to MD Office, who decide where it belongs. Both departments see what you write.',
+      label: 'Why does this belong somewhere else',
+      required: true,
+      confirmLabel: 'Send to MD Office',
+      tone: 'bad',
+      run: note => call('dispute_task', { p_task: t.id, p_reason: note },
+        'Sent to MD Office to decide.')
+    })
   }
 
 
@@ -406,7 +428,9 @@ export default function TaskDetail() {
 
         {holding && t.status === 'acknowledged' && (
           <button className="btn-dark w-full" disabled={busy}
-            onClick={() => call('start_task', { p_task: t.id, p_note: null })}>
+            onClick={() => call('start_task', { p_task: t.id, p_note: null },
+              'Started. Add a step as the work moves.')
+              .catch(e => setNotice(e.message))}>
             Start work
           </button>
         )}
@@ -421,8 +445,22 @@ export default function TaskDetail() {
               </p>
             )}
             <button className="btn-gold w-full" disabled={busy}
-              onClick={() => call('complete_task', {
-                p_task: t.id, p_note: prompt('Anything to note? (optional)') || null })}>
+              onClick={() => setAsk({
+                key: 'complete',
+                title: 'Mark this as done',
+                message: `It goes to ${t.from_dept_name} to check. They can accept it or send it back.`,
+                label: 'What was done',
+                placeholder: 'Optional, but it saves them asking',
+                confirmLabel: 'Mark as done',
+                tone: 'gold',
+                blocked: t.attachments > 0 ? null
+                  : 'Add a photo or a voice note first. Scroll up to Photos and voice \u2014 the task cannot be closed without evidence.',
+                warning: points.length > 0 && donePoints < points.length
+                  ? `${points.length - donePoints} sub-point${points.length - donePoints > 1 ? 's are' : ' is'} still unticked. Say why below.`
+                  : null,
+                run: note => call('complete_task', { p_task: t.id, p_note: note },
+                  `Marked done. ${t.from_dept_name} will check it.`)
+              })}>
               Mark as done
             </button>
           </>
@@ -473,6 +511,30 @@ export default function TaskDetail() {
       <Link to="/tasks" className="block text-center text-sm font-medium text-slate2">
         Back to tasks
       </Link>
+
+      {ask && (
+        <AskSheet
+          title={ask.title}
+          message={ask.message}
+          label={ask.label}
+          placeholder={ask.placeholder}
+          required={ask.required}
+          confirmLabel={ask.confirmLabel}
+          tone={ask.tone}
+          warning={ask.warning}
+          blocked={ask.blocked}
+          onConfirm={async note => { await ask.run(note); setAsk(null) }}
+          onClose={() => setAsk(null)}
+        />
+      )}
+
+      {notice && (
+        <div className="fixed inset-x-4 bottom-20 z-[70] rounded-lg bg-ink px-4 py-3
+                        text-sm text-white shadow-pop md:inset-x-auto md:bottom-6 md:right-6 md:max-w-sm"
+          onClick={() => setNotice(null)}>
+          {notice}
+        </div>
+      )}
 
       {sending && (
         <SendPdfSheet
