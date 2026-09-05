@@ -96,11 +96,40 @@ const GODOWN = 'godown'
       // SheetJS reads an ArrayBuffer as text
       const buf = new Uint8Array(await f.arrayBuffer())
       const wb = XLSX.read(buf, { type: 'array', cellDates: true })
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]])
-      if (!rows.length) throw new Error('The sheet has no rows')
-      if (!('BarCode' in rows[0])) {
-        throw new Error('No BarCode column. Is this a stock analysis export?')
+
+      /* Find the sheet and the header row rather than assuming the
+         first of each.
+
+         A file saved through Excel as Book1 often has the headers a row
+         or two down, or the data on the second sheet. Assuming row 1 of
+         sheet 1 gave "No BarCode column" on a file that was perfectly
+         good. */
+      let rows = null, foundOn = null
+      outer:
+      for (const name of wb.SheetNames) {
+        const grid = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, blankrows: false })
+        for (let i = 0; i < Math.min(grid.length, 15); i++) {
+          const head = (grid[i] || []).map(c => String(c ?? '').trim())
+          if (!head.some(h => /^bar\s*code$/i.test(h))) continue
+
+          // rebuild with that row as the header
+          const keys = head.map(h => h.replace(/\s+/g, ''))
+          rows = grid.slice(i + 1)
+            .map(r => Object.fromEntries(keys.map((k, j) => [k, r[j]])))
+            .filter(r => Object.values(r).some(v => v !== undefined && v !== ''))
+          foundOn = { sheet: name, row: i + 1 }
+          break outer
+        }
       }
+
+      if (!rows) {
+        const first = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 })[0] || []
+        throw new Error(
+          'No BarCode column found on any sheet. Sheets: ' + wb.SheetNames.join(', ') +
+          '. The first row reads: ' + first.slice(0, 8).map(c => String(c ?? '')).join(' | ') +
+          '. This needs to be the stock analysis export, not a summary.')
+      }
+      if (!rows.length) throw new Error('Found the headers but there are no rows under them')
 
       /* Five of the nine shop exports end with a totals row: blank
          barcode, with the day's totals sitting in the quantity and
@@ -132,7 +161,7 @@ const GODOWN = 'godown'
       const value = withStock.reduce((s, r) => s + r.Amount, 0)
 
       setParsed({
-        all, withStock, totalRows, merged: body.length - all.length,
+        all, withStock, totalRows, foundOn, merged: body.length - all.length,
         zeroStock: all.length - withStock.length,
         pieces, value,
         divisions: [...new Set(all.map(r => Number(r.DiviCode)).filter(Number.isFinite))],
@@ -390,6 +419,12 @@ const GODOWN = 'godown'
               <strong>This shop has already been uploaded today.</strong>{' '}
               {Number(locked.rows_loaded).toLocaleString('en-IN')} rows,
               {' '}{lakh(locked.total_value)}. Clear it below before loading again.
+            </div>
+          )}
+
+          {parsed.foundOn && (parsed.foundOn.sheet !== 'Sheet1' || parsed.foundOn.row !== 1) && (
+            <div className="border-t border-line px-4 py-2.5 text-xs text-slate2">
+              Headers found on sheet "{parsed.foundOn.sheet}", row {parsed.foundOn.row}.
             </div>
           )}
 
