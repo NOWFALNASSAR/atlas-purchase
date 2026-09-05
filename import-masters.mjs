@@ -59,10 +59,13 @@ if (itemPath) {
     .map(r => ({ name: String(r[0] ?? '').trim(), unit: r[1], vat: r[2], cess: r[3], divi: r[4] }))
     .filter(r => r.name)
 
+  // 56 duplicate names in the export. The key must match the database's
+  // name_key exactly — upper(btrim(name)) — or a pair that looks distinct
+  // here collides there and the same error comes back.
   const seen = new Set()
   const values = body.filter(r => {
-    const k = r.name.toUpperCase()
-    if (seen.has(k)) return false      // 56 duplicate names in the export
+    const k = r.name.trim().toUpperCase()
+    if (seen.has(k)) return false
     seen.add(k); return true
   }).map(r =>
     `(${q(r.name)}, ${q(r.unit || 'Nos')}, ${n(r.vat)}, ${n(r.cess)}, ${q(r.divi)})`)
@@ -70,11 +73,13 @@ if (itemPath) {
   out.push(`\n-- item master: ${values.length} items`)
   for (let i = 0; i < values.length; i += 500) {
     out.push(`insert into item_master (name, unit, tax_pct, cess_pct, division_code)
-select v.name, v.unit, v.tax, v.cess, dv.code
+select v.name, v.unit, v.tax::numeric, v.cess::numeric, dv.code
 from (values\n  ${values.slice(i, i + 500).join(',\n  ')}
 ) as v(name, unit, tax, cess, divi)
 left join divisions dv on upper(replace(dv.name,' ','')) = upper(replace(v.divi,' ',''))
-on conflict do nothing;`)
+on conflict (name_key) do update
+  set unit = excluded.unit, tax_pct = excluded.tax_pct,
+      cess_pct = excluded.cess_pct, division_code = excluded.division_code;`)
   }
 }
 
@@ -82,17 +87,36 @@ on conflict do nothing;`)
 if (supplierPath) {
   const wb = readBook(supplierPath)
   const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 })
-  const values = rows.slice(1)
+  /* 35 name+place combinations repeat in the export — M/S. DEEPIKA
+     TEXTILES,PANIPAT appears five times. Postgres refuses an
+     ON CONFLICT DO UPDATE that would touch the same row twice in one
+     statement, so they have to be collapsed here.
+
+     Keeping the row with the most filled in, since the duplicates are
+     usually one complete record and several sparse ones. */
+  const seenSup = new Map()
+  rows.slice(1)
     .map(r => ({ name: String(r[0] ?? '').trim(), a1: r[1], a2: r[2], place: r[3],
                  phone: r[4], mobile: r[5], reg: r[6] }))
     .filter(r => r.name)
+    .forEach(r => {
+      const key = (r.name + ',' + String(r.place ?? '').trim()).toUpperCase().trim()
+      const filled = [r.a1, r.a2, r.place, r.phone, r.mobile, r.reg]
+        .filter(v => String(v ?? '').trim()).length
+      const prev = seenSup.get(key)
+      if (!prev || filled > prev.filled) seenSup.set(key, { ...r, filled })
+    })
+
+  const values = [...seenSup.values()]
     .map(r => `(${q(r.name)}, ${q(r.place)}, ${q(r.a1)}, ${q(r.a2)}, ${q(r.phone)}, ${q(r.mobile)}, ${q(r.reg)})`)
 
   out.push(`\n-- supplier master: ${values.length} suppliers`)
   for (let i = 0; i < values.length; i += 500) {
     out.push(`insert into supplier_master (name, place, address, address2, phone, mobile, gstin)
 values\n  ${values.slice(i, i + 500).join(',\n  ')}
-on conflict do nothing;`)
+on conflict (match_key) do update
+  set address = excluded.address, address2 = excluded.address2,
+      phone = excluded.phone, mobile = excluded.mobile;`)
   }
 }
 
@@ -101,25 +125,69 @@ const wb = readBook(stockPath, { cellDates: true })
 const sheet = wb.Sheets[wb.SheetNames[0]]
 const stock = XLSX.utils.sheet_to_json(sheet)
 
+/* 20 batches appear on more than one row — same barcode, same purchase
+   reference, same item, same price, same arrival date, with the
+   quantity split across the rows. Postgres will not let one statement
+   update the same key twice, and dropping the extra rows would lose
+   11,512 pieces worth about ₹16 L.
+
+   So they are added together: quantities and value summed, everything
+   else taken from the first row. Unit cost is recomputed from the
+   combined figures rather than carried over from one of the parts. */
+const merged = new Map()
+for (const r of stock) {
+  const key = `${r.BarCode}|${r.PurRefNo}`
+  const prev = merged.get(key)
+  if (!prev) {
+    merged.set(key, { ...r, Qty: Number(r.Qty) || 0,
+                      Stock: Number(r.Stock) || 0, Amount: Number(r.Amount) || 0 })
+  } else {
+    prev.Qty    += Number(r.Qty) || 0
+    prev.Stock  += Number(r.Stock) || 0
+    prev.Amount += Number(r.Amount) || 0
+  }
+}
+const mergedRows = [...merged.values()]
+if (mergedRows.length !== stock.length) {
+  console.log(`  merged ${stock.length - mergedRows.length} split rows into their batch`)
+}
+
 let pieces = 0, value = 0
-const lines = stock.map(r => {
-  const qty = Number(r.Stock) || 0
-  const amt = Number(r.Amount) || 0
+const lines = mergedRows.map(r => {
+  const qty = r.Stock
+  const amt = r.Amount
   pieces += qty; value += amt
   const unitCost = qty > 0 ? amt / qty : 0
+  // StockPer is recomputed too — the exported value belonged to one part
+  r.StockPer = r.Qty > 0 ? (qty / r.Qty * 100) : 0
   return { r, qty, amt, unitCost }
 })
+
+/* Any division the file uses that the schema does not know about.
+   The DIVISION CODE sheet turned out to be incomplete — the stock data
+   used code 14 for perfume, which the sheet never listed, and the
+   import failed on the foreign key. Rather than fix that one code and
+   wait to be surprised again, insert whatever is in the data. */
+const divs = [...new Set(mergedRows.map(r => Number(r.DiviCode)).filter(Number.isFinite))]
+out.push(`\n-- divisions present in this file: ${divs.join(', ')}`)
+out.push(`insert into divisions (code, name, sort_order)
+values\n  ${divs.map(d => `(${d}, 'Division ${d}', ${d})`).join(',\n  ')}
+on conflict (code) do nothing;`)
 
 // Every purchase type the file actually uses, after mapping blanks and
 // the two stray colours to Non CC. Inserted first so the foreign key on
 // barcodes.purchase_type holds.
-const ptypes = [...new Set(stock.map(r => purchaseType(r.Colour)))]
+const ptypes = [...new Set(mergedRows.map(r => purchaseType(r.Colour)))]
 out.push(`\n-- purchase types found in the stock file: ${ptypes.length}`)
 out.push(`insert into purchase_types (code, label, sort_order)
 values\n  ${ptypes.map(v => `(${q(v)}, ${q(v)}, 50)`).join(',\n  ')}
 on conflict (code) do nothing;`)
 
 out.push(`\n-- stock snapshot: ${lines.length} barcodes, ${Math.round(pieces)} pieces, ${Math.round(value)} at cost`)
+// Clear any snapshot already loaded for today before making a new one,
+// so re-running this part starts clean instead of colliding with the
+// unique index. stock_lines cascade away with it.
+out.push(`delete from stock_snapshots where taken_on = current_date and shop_id is null;`)
 out.push(`insert into stock_snapshots (taken_on, source_file, rows_loaded, total_pieces, total_value)
 values (current_date, ${q(stockPath.split('/').pop())}, ${lines.length}, ${pieces.toFixed(2)}, ${value.toFixed(2)});`)
 
@@ -152,10 +220,32 @@ const sl = lines.map(({ r, qty, amt, unitCost }) =>
 
 out.push(`\n-- stock lines`)
 for (let i = 0; i < sl.length; i += 400) {
+  /* Every column is cast explicitly rather than using v.*.
+     Inside a VALUES list feeding a SELECT, a quoted literal like
+     '2026-08-17' is typed as text, and Postgres will not put text into
+     a date column. The plain INSERT ... VALUES form infers types from
+     the target columns and does not have this problem, which is why the
+     barcodes insert above works without casts. */
   out.push(`insert into stock_lines (snapshot_id, barcode, purchase_ref, item_code, item_name,
   supplier_code, division_code, qty_received, qty_on_hand, stock_pct, value_at_cost,
   unit_cost, sale_price, arrival_date, days_held, purchase_type)
-select s.id, v.* from (values\n  ${sl.slice(i, i + 400).join(',\n  ')}
+select s.id,
+       v.barcode,
+       v.purchase_ref::int,
+       v.item_code::int,
+       v.item_name,
+       v.supplier_code::int,
+       v.division_code::int,
+       v.qty_received::numeric,
+       v.qty_on_hand::numeric,
+       v.stock_pct::numeric,
+       v.value_at_cost::numeric,
+       v.unit_cost::numeric,
+       v.sale_price::numeric,
+       v.arrival_date::date,
+       v.days_held::int,
+       v.purchase_type
+from (values\n  ${sl.slice(i, i + 400).join(',\n  ')}
 ) as v(barcode, purchase_ref, item_code, item_name, supplier_code, division_code,
        qty_received, qty_on_hand, stock_pct, value_at_cost, unit_cost, sale_price,
        arrival_date, days_held, purchase_type)
@@ -224,8 +314,50 @@ union all select 'stock lines', count(*) from stock_lines;
 select * from v_stock_ageing order by sort_order;
 select * from v_stock_by_purchase_type order by value desc nulls last;`)
 
-const file = `import-${new Date().toISOString().slice(0, 10)}.sql`
-writeFileSync(file, out.join('\n'))
-console.log(`\n  ${file} written`)
-console.log(`  ${lines.length} barcodes, ${Math.round(pieces).toLocaleString('en-IN')} pieces, ` +
-            `₹${(value / 1e7).toFixed(2)} crore at cost\n`)
+/* ---------- write it out in pieces ----------
+
+   The whole thing is around 9 MB. The Supabase SQL editor will not
+   take that in one paste — it is a browser textarea, not a file
+   loader. So it is split into parts small enough to paste, numbered in
+   the order they must be run.
+
+   Each part is a complete transaction on its own, so if part 7 fails
+   parts 1 to 6 are still safely in.
+*/
+
+const MAX = 900_000                  // characters per part, comfortably pasteable
+const stamp = new Date().toISOString().slice(0, 10)
+const parts = []
+let buf = []
+let size = 0
+
+for (const chunk of out) {
+  if (size + chunk.length > MAX && buf.length) {
+    parts.push(buf); buf = []; size = 0
+  }
+  buf.push(chunk); size += chunk.length
+}
+if (buf.length) parts.push(buf)
+
+parts.forEach((body, i) => {
+  const num = String(i + 1).padStart(2, '0')
+  const head = [
+    `-- ============================================================`,
+    `-- ATLAS import ${stamp} — part ${i + 1} of ${parts.length}`,
+    `--`,
+    `-- Run the parts IN ORDER. Each is its own transaction, so a`,
+    `-- failure in one leaves the earlier parts safely loaded.`,
+    `-- ============================================================`,
+    'begin;'
+  ]
+  const tail = ['commit;']
+  const clean = body.filter(l => l !== 'begin;' && l !== 'commit;')
+  writeFileSync(`import-${stamp}-part${num}.sql`,
+                [...head, ...clean, ...tail].join('\n'))
+})
+
+console.log(`\n  ${parts.length} files written: import-${stamp}-part01.sql … part${String(parts.length).padStart(2,'0')}.sql`)
+console.log(`  ${lines.length.toLocaleString('en-IN')} barcodes, ` +
+            `${Math.round(pieces).toLocaleString('en-IN')} pieces, ` +
+            `₹${(value / 1e7).toFixed(2)} crore at cost`)
+console.log(`  run them in order in the Supabase SQL editor\n`)
