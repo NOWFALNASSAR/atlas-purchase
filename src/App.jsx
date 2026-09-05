@@ -118,11 +118,11 @@ const MODULES = [
     pages: [
       { to: '/sales',           label: 'Sales dashboard', short: 'Sales',    perm: 'sales.view' },
       { to: '/sales/reports',   label: 'Daily reports',   short: 'Daily',    perm: 'sales.reports' },
-      { to: '/sales/upload',    label: 'Upload the day',  short: 'Upload',   perm: 'sales.import' },
+      { to: '/sales/upload',    label: 'Upload BILLWISE + ITEMWISE', short: 'Upload', perm: 'sales.import' },
       { to: '/sales/branches',  label: 'Branches',        short: 'Branches', perm: 'sales.branches' },
       { to: '/sales/salesmen',  label: 'Salesmen',        short: 'Team',     perm: 'sales.salesmen' },
       { to: '/sales/targets',   label: 'Targets',         short: 'Targets',  perm: 'sales.targets.view' },
-      { to: '/sales/import',    label: 'Upload sales',    short: 'Upload',   perm: 'sales.import' }
+      { to: '/sales/import',    label: 'Upload branch summary (old)', short: 'Old',  perm: 'sales.import' }
     ]
   },
   {

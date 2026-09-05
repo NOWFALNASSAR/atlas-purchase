@@ -231,7 +231,25 @@ export default function SalesImport() {
           </label>
           <button className="btn-ghost" onClick={template}>Download format</button>
         </div>
-      </div>
+      <div className="card mb-3 border-gold/40 bg-gold2 p-4">
+            <div className="text-sm font-semibold text-gold">
+              Is this the right screen?
+            </div>
+            <p className="mt-1 text-xs text-slate2">
+              This one takes a summary sheet that has a <strong>branch</strong> column
+              in it — one row per branch per day. It is the older format, from before
+              the billing exports were wired up.
+            </p>
+            <p className="mt-1.5 text-xs text-slate2">
+              If you have <strong>BILLWISE</strong>, <strong>ITEMWISE</strong> and{' '}
+              <strong>SALESMANWISE</strong> straight out of the billing software, they
+              belong on <a href="/sales/upload" className="font-semibold text-gold underline">
+              Upload BILLWISE + ITEMWISE</a> instead. Those files have no branch column,
+              so every row here will be rejected.
+            </p>
+          </div>
+
+          </div>
 
       {/* what the branch column must contain */}
       {branches.length > 0 && (
