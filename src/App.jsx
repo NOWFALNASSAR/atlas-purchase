@@ -24,6 +24,7 @@ import Transfers from './pages/Transfers'
 import Inventory from './pages/Inventory'
 import StockReports from './pages/StockReports'
 import SalesDashboard from './pages/SalesDashboard'
+import SalesReports   from './pages/SalesReports'
 import SalesBranches  from './pages/SalesBranches'
 import Salesmen       from './pages/Salesmen'
 import Targets        from './pages/Targets'
@@ -115,6 +116,7 @@ const MODULES = [
     key: 'sales', label: 'Sales', short: 'Sales',
     pages: [
       { to: '/sales',           label: 'Sales dashboard', short: 'Sales',    perm: 'sales.view' },
+      { to: '/sales/reports',   label: 'Daily reports',   short: 'Daily',    perm: 'sales.reports' },
       { to: '/sales/branches',  label: 'Branches',        short: 'Branches', perm: 'sales.branches' },
       { to: '/sales/salesmen',  label: 'Salesmen',        short: 'Team',     perm: 'sales.salesmen' },
       { to: '/sales/targets',   label: 'Targets',         short: 'Targets',  perm: 'sales.targets.view' },
@@ -247,6 +249,7 @@ export default function App() {
           <Route path="/transfers"        element={<Need p="transfers.view"><Transfers /></Need>} />
 
           <Route path="/sales"            element={<Need p="sales.view"><SalesDashboard /></Need>} />
+          <Route path="/sales/reports"    element={<Need p="sales.reports"><SalesReports /></Need>} />
           <Route path="/sales/branches"   element={<Need p="sales.branches"><SalesBranches /></Need>} />
           <Route path="/sales/salesmen"   element={<Need p="sales.salesmen"><Salesmen /></Need>} />
           <Route path="/sales/targets"    element={<Need p="sales.targets.view"><Targets /></Need>} />
@@ -689,6 +692,8 @@ const LEGACY = {
   'tasks.score':     ['admin', 'hod', 'manager'],
   'purchase.targets':['admin', 'hod', 'manager'],
   'stock.reports':   ['admin', 'hod', 'manager'],
+  'sales.reports':   ['admin', 'hod', 'manager', 'accounts'],
+  'sales.targets':   ['admin', 'hod', 'manager'],
   'suppliers.view':  ['hod', 'admin'],
   'suppliers.edit':  ['hod', 'admin'],
   'items.view':      ['hod', 'admin'],
