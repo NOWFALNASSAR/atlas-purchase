@@ -152,8 +152,27 @@ if (mergedRows.length !== stock.length) {
   console.log(`  merged ${stock.length - mergedRows.length} split rows into their batch`)
 }
 
+/* A full godown master includes barcodes at zero stock. They matter:
+   the godown created them and still holds the item, division and
+   supplier, which is what classifies a sale.
+
+   So every row goes into `barcodes` — that is the classification
+   master. Only rows with stock go into `stock_lines`, which is the
+   stock snapshot; a zero-stock row is not stock and would drag every
+   stock report down with rows worth nothing. */
+const withStock = mergedRows.filter(r => (Number(r.Stock) || 0) > 0)
+const zeroStock = mergedRows.length - withStock.length
+if (zeroStock > 0) {
+  console.log(`  ${zeroStock.toLocaleString('en-IN')} barcodes at zero stock — ` +
+              `kept for classification, left out of the stock figures`)
+} else {
+  console.log('  every row has stock. If this is the full godown master, the export')
+  console.log('  still has a "stock greater than zero" filter on it — ask for it off,')
+  console.log('  or sold-out barcodes stay unclassified on the sales reports.')
+}
+
 let pieces = 0, value = 0
-const lines = mergedRows.map(r => {
+const lines = withStock.map(r => {
   const qty = r.Stock
   const amt = r.Amount
   pieces += qty; value += amt
@@ -192,7 +211,12 @@ out.push(`insert into stock_snapshots (taken_on, source_file, rows_loaded, total
 values (current_date, ${q(stockPath.split('/').pop())}, ${lines.length}, ${pieces.toFixed(2)}, ${value.toFixed(2)});`)
 
 // barcodes — one row per batch, updated if seen before
-const bc = lines.map(({ r, unitCost }) =>
+// barcodes: EVERY row, with or without stock
+const bc = mergedRows.map(r => {
+  const q = Number(r.Stock) || 0
+  const a = Number(r.Amount) || 0
+  return { r, unitCost: q > 0 ? a / q : 0 }
+}).map(({ r, unitCost }) =>
   `(${q(r.BarCode)}, ${n(r.ItemCode)}, ${q(r.Item)}, ${n(r.SupCode)}, ${q(r.Supplier)}, ` +
   `${n(r.DiviCode)}, ${n(r.BrandCode)}, ${q(r.BrandName)}, ${n(r.PurRefNo)}, ${d(r.Arrival)}, ` +
   `${n(r.Qty)}, ${unitCost.toFixed(4)}, ${n(r.SalePrice)}, ${n(r.SelRateAfterDisc)}, ` +
