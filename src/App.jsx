@@ -22,6 +22,7 @@ import Insights  from './pages/Insights'
 import Godown    from './pages/Godown'
 import Transfers from './pages/Transfers'
 import Inventory from './pages/Inventory'
+import StockReports from './pages/StockReports'
 import SalesDashboard from './pages/SalesDashboard'
 import SalesBranches  from './pages/SalesBranches'
 import Salesmen       from './pages/Salesmen'
@@ -105,6 +106,7 @@ const MODULES = [
     key: 'stock', label: 'Stock', short: 'Stock',
     pages: [
       { to: '/inventory',  label: 'Inventory', short: 'Stock',     perm: 'inventory.view' },
+      { to: '/stock/reports', label: 'Stock reports', short: 'Reports', perm: 'stock.reports' },
       { to: '/godown',     label: 'Godown',    short: 'Godown',    perm: 'godown.view' },
       { to: '/transfers',  label: 'Transfers', short: 'Transfers', perm: 'transfers.view' }
     ]
@@ -150,7 +152,7 @@ const moduleFor = (path) => {
   if (path.startsWith('/tasks')) return 'tasks'
   if (path.startsWith('/purchase')) return 'purchase'
   if (path.startsWith('/sales')) return 'sales'
-  if (['/inventory', '/godown', '/transfers'].some(p => path.startsWith(p))) return 'stock'
+  if (['/inventory', '/godown', '/transfers', '/stock'].some(p => path.startsWith(p))) return 'stock'
   if (['/suppliers', '/items', '/users', '/roles', '/settings'].some(p => path.startsWith(p))) return 'masters'
   return 'purchase'
 }
@@ -240,6 +242,7 @@ export default function App() {
           <Route path="/insights"         element={<Need p="insights.view"><Insights /></Need>} />
 
           <Route path="/inventory"        element={<Need p="inventory.view"><Inventory /></Need>} />
+          <Route path="/stock/reports"    element={<Need p="stock.reports"><StockReports /></Need>} />
           <Route path="/godown"           element={<Need p="godown.view"><Godown /></Need>} />
           <Route path="/transfers"        element={<Need p="transfers.view"><Transfers /></Need>} />
 
@@ -685,6 +688,7 @@ const LEGACY = {
   'tasks.pfd':       ['admin', 'hod', 'manager', 'executive', 'accounts'],
   'tasks.score':     ['admin', 'hod', 'manager'],
   'purchase.targets':['admin', 'hod', 'manager'],
+  'stock.reports':   ['admin', 'hod', 'manager'],
   'suppliers.view':  ['hod', 'admin'],
   'suppliers.edit':  ['hod', 'admin'],
   'items.view':      ['hod', 'admin'],
