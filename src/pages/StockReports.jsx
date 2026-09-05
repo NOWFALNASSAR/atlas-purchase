@@ -8,11 +8,10 @@ import { db, lakh, inr, dt, num } from '../lib/db'
    Reads the data imported from the billing software — item_master,
    supplier_master, barcodes and stock_lines.
 
-   Kept separate from Masters → Items and Masters → Suppliers, which
-   read the older `items` and `suppliers` tables that purchase orders
-   depend on. Merging the two is a job on its own; pointing the order
-   screens at a different table without doing it properly would break
-   every existing order.
+   The Item master and Supplier master tabs read `items` and
+   `suppliers` — the same rows the purchase order screens use. Migration
+   40 folded the uploaded masters into those tables rather than keeping
+   a second set, so there is one master everywhere.
    ================================================================== */
 
 const TABS = [
@@ -52,8 +51,9 @@ export default function StockReports() {
           db.from('v_slow_movers').select('*').order('value_at_cost', { ascending: false }).limit(500),
           db.from('v_price_spread').select('*').order('value', { ascending: false }).limit(300),
           db.from('v_stock_anomalies').select('*').limit(200),
-          db.from('item_master').select('*').order('name').limit(500),
-          db.from('supplier_master').select('*').order('name').limit(500)
+          // the unified master, the same rows purchase orders use
+          db.from('items').select('*').eq('active', true).order('name').limit(500),
+          db.from('suppliers').select('*').eq('active', true).order('name').limit(500)
         ])
 
       if (snap.error) throw snap.error
@@ -237,10 +237,11 @@ export default function StockReports() {
           {tab === 'items' && (
             <Searchable q={q} setQ={setQ} placeholder="Search item name"
               rows={data.items} match={(r, t) => (r.name || '').toLowerCase().includes(t)}
-              note="From the item master export. Showing the first 500 by name — search to narrow it."
-              head={['Item', 'Code', 'Unit', 'Tax %', 'Division']}
-              cells={r => [r.name, r.code ?? '—', r.unit, num(r.tax_pct, 0) + '%',
-                           r.division_code ?? '—']} align="llllr" />
+              note="The single item master — the same rows the purchase order screens use. First 500 by name; search to narrow it."
+              head={['Item', 'Code', 'Billing code', 'Unit', 'Tax %', 'Source']}
+              cells={r => [r.name, r.code, r.billing_code ?? '—', r.unit || 'Nos',
+                           num(r.tax_pct, 0) + '%', r.source === 'billing' ? 'billing software' : 'Atlas']}
+              align="llllrl" />
           )}
 
           {tab === 'suppliers' && (
@@ -248,10 +249,11 @@ export default function StockReports() {
               rows={data.suppliers}
               match={(r, t) => (r.name || '').toLowerCase().includes(t) ||
                                (r.place || '').toLowerCase().includes(t)}
-              note="From the supplier master export. Showing the first 500 by name."
-              head={['Supplier', 'Place', 'Code', 'Mobile']}
-              cells={r => [r.name, r.place || '—', r.code ?? '—', r.mobile || '—']}
-              align="llll" />
+              note="The single supplier master — the same rows purchase orders use."
+              head={['Supplier', 'Place', 'Code', 'Mobile', 'Source']}
+              cells={r => [r.name, r.place || '—', r.code, r.mobile || '—',
+                           r.source === 'billing' ? 'billing software' : 'Atlas']}
+              align="lllll" />
           )}
         </>
       )}
