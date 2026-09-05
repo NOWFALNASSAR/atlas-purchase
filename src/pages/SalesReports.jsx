@@ -226,19 +226,23 @@ export default function SalesReports() {
           {(tab === 'division' || tab === 'supplier') && (
             <>
               <p className="text-xs text-slate2">
-                Only barcodes we can identify appear here. The stock export lists
-                barcodes that still have stock, so a batch sold out is unclassified
-                until your billing vendor adds the division and supplier codes to the
-                itemwise export.
+                Taken from the godown master, which is where barcodes are created.
+                Anything showing Unclassified is a barcode the godown export did not
+                include — that export filters out items with no stock left, so a
+                batch that sold out is missing from it.
               </p>
               <Table
-                head={[tab === 'division' ? 'Division' : 'Supplier', 'Qty', 'Sales', 'Cost', 'Margin', 'Margin %']}
-                align="lrrrrr"
-                rows={(tab === 'division' ? d.divi : d.sup || []).map(r => [
-                  tab === 'division' ? r.division : r.supplier,
-                  num(r.qty, 0), inr(r.value_extax), inr(r.cost), inr(r.margin),
-                  r.margin_pct == null ? '—' : num(r.margin_pct, 1) + '%'
-                ])} />
+                head={tab === 'division'
+                  ? ['Division', 'Qty', 'Sales', 'Cost', 'Margin', 'Margin %']
+                  : ['Supplier', 'Place', 'Qty', 'Sales', 'Cost', 'Margin', 'Margin %']}
+                align={tab === 'division' ? 'lrrrrr' : 'llrrrrr'}
+                rows={(tab === 'division' ? (d.divi || []) : (d.sup || [])).map(r =>
+                  tab === 'division'
+                    ? [r.division, num(r.qty, 0), inr(r.value_extax), inr(r.cost),
+                       inr(r.margin), r.margin_pct == null ? '—' : num(r.margin_pct, 1) + '%']
+                    : [r.supplier, r.place || '—', num(r.qty, 0), inr(r.value_extax),
+                       inr(r.cost), inr(r.margin),
+                       r.margin_pct == null ? '—' : num(r.margin_pct, 1) + '%'])} />
             </>
           )}
 
