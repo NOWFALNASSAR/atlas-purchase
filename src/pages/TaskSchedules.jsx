@@ -26,6 +26,7 @@ export default function TaskSchedules() {
   const [busy, setBusy] = useState(false)
   const [ran, setRan] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [showSetup, setShowSetup] = useState(false)
 
   useEffect(() => { boot() }, [])
 
@@ -173,19 +174,30 @@ export default function TaskSchedules() {
         </ul>
       )}
 
-      <div className="card p-4 text-xs text-slate2">
-        <p className="mb-1 font-semibold text-ink">Running on its own</p>
-        <p>
-          Opening this page raises anything that is due. To have it happen at 6am
-          without anyone opening anything, run these two lines once in Supabase →
-          SQL Editor:
-        </p>
-        <pre className="mt-2 overflow-x-auto rounded bg-paper p-2 text-2xs">
+      {/* A block of SQL is not something the person running this screen
+          every week needs to read. Tucked away, one line, opened once. */}
+      <div className="text-center">
+        <button className="text-xs font-medium text-slate2 hover:text-ink"
+          onClick={() => setShowSetup(v => !v)}>
+          {showSetup ? 'Hide' : 'How to make these run without opening this page'}
+        </button>
+      </div>
+
+      {showSetup && (
+        <div className="card p-4 text-xs text-slate2">
+          <p>
+            Opening this page already raises anything due. To have it happen at 6am
+            on its own, run these two lines once in Supabase → SQL Editor. You only
+            ever do this once.
+          </p>
+          <pre className="mt-2 overflow-x-auto rounded bg-paper p-2 text-2xs">
 {`create extension if not exists pg_cron;
 select cron.schedule('atlas-task-schedules', '30 0 * * *',
                      $$select run_task_schedules()$$);`}
-        </pre>
-      </div>
+          </pre>
+          <p className="mt-2">00:30 UTC is 6:00am India time.</p>
+        </div>
+      )}
 
       {edit && (
         <Sheet title={edit.id ? edit.name : 'New schedule'} onClose={() => setEdit(null)}>
