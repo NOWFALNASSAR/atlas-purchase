@@ -80,7 +80,10 @@ export default function StockReports() {
         items: items.data || [], suppliers: sups.data || [],
         byShop: byShop.data || []
       })
-      setShops((byShop.data || []).map(r => r.shop).filter(Boolean))
+      // {label to show, key to filter on} — they are not the same
+      setShops((byShop.data || [])
+        .filter(r => r.shop_key)
+        .map(r => ({ label: r.shop, key: r.shop_key })))
       setFailed(null)
     } catch (e) {
       setFailed(e.message)
@@ -139,7 +142,7 @@ export default function StockReports() {
           {shops.length > 1 && (
             <select className="!w-auto" value={shop} onChange={e => setShop(e.target.value)}>
               <option value="all">All shops</option>
-              {shops.map(sh => <option key={sh} value={sh}>{sh}</option>)}
+              {shops.map(sh => <option key={sh.key} value={sh.key}>{sh.label}</option>)}
             </select>
           )}
           <button className="btn-ghost btn-sm" onClick={exportExcel}>Excel</button>

@@ -22,7 +22,13 @@ import { db, inr, lakh, dt, num } from '../lib/db'
    error.
    ================================================================== */
 
-const BATCH = 500
+/* 500 rows of 20 columns is a big request, and the godown file is
+   30,883 of them — 62 round trips, each one large enough to be slow on
+   shop wifi and to look like nothing is happening.
+
+   200 is a better trade: more requests, but each returns quickly, the
+   count moves visibly, and a failure loses less. */
+const BATCH = 200
 
 export default function StockUpload() {
   const [file, setFile] = useState(null)
@@ -196,6 +202,14 @@ const GODOWN = 'godown'
         { onConflict: 'code', ignoreDuplicates: true })
 
       // every barcode, stock or not — this is what classifies a sale
+      const started = Date.now()
+      const eta = (done, total) => {
+        if (done < BATCH * 2) return ''
+        const per = (Date.now() - started) / done
+        const left = Math.round((total - done) * per / 1000)
+        return left > 5 ? `  ·  about ${left < 60 ? left + ' seconds' : Math.ceil(left / 60) + ' minutes'} left` : ''
+      }
+
       let n = 0
       for (let i = 0; i < p.all.length; i += BATCH) {
         const part = p.all.slice(i, i + BATCH)
@@ -220,7 +234,9 @@ const GODOWN = 'godown'
         })), { onConflict: 'barcode,purchase_ref' })
         if (error) throw error
         n += part.length
-        setProgress(`Barcodes ${n.toLocaleString('en-IN')} of ${p.all.length.toLocaleString('en-IN')}…`)
+        setProgress(`Barcodes ${n.toLocaleString('en-IN')} of ` +
+                    `${p.all.length.toLocaleString('en-IN')}` +
+                    `  (${Math.round(n / p.all.length * 100)}%)${eta(n, p.all.length)}`)
       }
 
       setProgress('Recording the stock snapshot…')
@@ -258,7 +274,9 @@ const GODOWN = 'godown'
         })))
         if (error) throw error
         n += part.length
-        setProgress(`Stock rows ${n.toLocaleString('en-IN')} of ${p.withStock.length.toLocaleString('en-IN')}…`)
+        setProgress(`Stock rows ${n.toLocaleString('en-IN')} of ` +
+                    `${p.withStock.length.toLocaleString('en-IN')}` +
+                    `  (${Math.round(n / p.withStock.length * 100)}%)${eta(n, p.withStock.length)}`)
       }
 
       setProgress('Classifying sales with what this file taught us…')
@@ -275,7 +293,8 @@ const GODOWN = 'godown'
       setProgress(null)
       boot()
     } catch (e) {
-      setError(e.message)
+      setError(e.message +
+        (progress ? `  —  it stopped at: ${progress}. Clear this shop's day and start again.` : ''))
       setProgress(null)
     }
     setBusy(false)
@@ -462,9 +481,13 @@ const GODOWN = 'godown'
                 : locked ? 'Already uploaded today — clear it first'
                 : `Upload ${parsed.all.length.toLocaleString('en-IN')} barcodes`}
             </button>
-            {parsed.all.length > 20000 && !busy && (
+            {parsed.all.length > 10000 && !busy && (
               <p className="mt-2 text-center text-2xs text-slate2">
-                A file this size takes a minute or two. Leave the page open.
+                {parsed.all.length.toLocaleString('en-IN')} barcodes goes up in{' '}
+                {Math.ceil(parsed.all.length / BATCH)} batches — roughly{' '}
+                {Math.ceil(parsed.all.length / BATCH / 12)} to{' '}
+                {Math.ceil(parsed.all.length / BATCH / 4)} minutes. The count below moves
+                as it goes. Leave the page open; closing it stops the upload part way.
               </p>
             )}
           </div>
