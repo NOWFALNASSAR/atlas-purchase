@@ -34,16 +34,42 @@ export default function StockUpload() {
   const [progress, setProgress] = useState(null)
   const [done, setDone] = useState(null)
   const [recent, setRecent] = useState([])
+  const [note, setNote] = useState('')
+  const [locked, setLocked] = useState(null)     // today's row for this shop
+  const [clearing, setClearing] = useState(null)
+  const [clearWhy, setClearWhy] = useState('')
+
+const GODOWN = 'godown'
 
   useEffect(() => { boot() }, [])
 
   async function boot() {
     const [sh, snaps] = await Promise.all([
       db.from('shops').select('id,code,name').eq('active', true).order('name'),
-      db.from('v_stock_snapshots_status').select('*').limit(30)
+      db.from('v_stock_movement').select('*')
+        .order('taken_on', { ascending: false }).limit(40)
     ])
     setShops(sh.data || [])
     setRecent(snaps.data || [])
+  }
+
+  /* Has this shop already been uploaded today? Same rule as sales: one
+     per shop per day, and loading it twice is how a figure doubles. */
+  useEffect(() => {
+    if (!shop) { setLocked(null); return }
+    const code = shopCode(shop)
+    const today = new Date().toISOString().slice(0, 10)
+    db.from('stock_snapshots').select('*')
+      .eq('taken_on', today)
+      .eq('shop_code', code)
+      .maybeSingle()
+      .then(({ data }) => setLocked(data || null))
+  }, [shop, shops])
+
+  const shopCode = id => {
+    if (id === GODOWN) return 'GODOWN'
+    const r = shops.find(x => x.id === id)
+    return (r?.code || r?.name || '').toUpperCase()
   }
 
   const num0 = v => {
@@ -121,13 +147,14 @@ export default function StockUpload() {
     if (!parsed || !shop) return
     setBusy(true); setError(null)
     const p = parsed
+    const isGodown = shop === GODOWN
     const shopRow = shops.find(s => s.id === shop)
-    const code = (shopRow?.code || shopRow?.name || '').toUpperCase()
+    const code = shopCode(shop)
 
     try {
       setProgress('Clearing the previous file for this shop…')
       await db.from('stock_snapshots').delete()
-        .eq('taken_on', new Date().toISOString().slice(0, 10)).eq('shop_id', shop)
+        .eq('taken_on', new Date().toISOString().slice(0, 10)).eq('shop_code', code)
 
       setProgress('Making room for new divisions and purchase types…')
       if (p.divisions.length) {
@@ -170,8 +197,12 @@ export default function StockUpload() {
       setProgress('Recording the stock snapshot…')
       const { data: snap, error: snapErr } = await db.from('stock_snapshots').insert({
         taken_on: new Date().toISOString().slice(0, 10),
-        source_file: file.name, shop_id: shop, shop_code: code,
-        rows_loaded: p.withStock.length, total_pieces: p.pieces, total_value: p.value
+        source_file: file.name,
+        shop_id: isGodown ? null : shop,
+        shop_code: code,
+        rows_loaded: p.withStock.length, total_pieces: p.pieces, total_value: p.value,
+        note: note.trim() || null,
+        locked: true
       }).select().single()
       if (snapErr) throw snapErr
 
@@ -180,7 +211,7 @@ export default function StockUpload() {
       for (let i = 0; i < p.withStock.length; i += BATCH) {
         const part = p.withStock.slice(i, i + BATCH)
         const { error } = await db.from('stock_lines').insert(part.map(r => ({
-          snapshot_id: snap.id, shop_id: shop, shop_code: code,
+          snapshot_id: snap.id, shop_id: isGodown ? null : shop, shop_code: code,
           barcode: String(r.BarCode).trim(),
           purchase_ref: num0(r.PurRefNo) || null,
           item_code: num0(r.ItemCode) || null,
@@ -204,7 +235,14 @@ export default function StockUpload() {
       setProgress('Classifying sales with what this file taught us…')
       const { data: relink } = await db.rpc('relink_sales', { p_from: null })
 
-      setDone({ ...p, shop: shopRow?.name || code, relink: relink?.[0] || null })
+      // what moved since this shop was last uploaded
+      const { data: mv } = await db.from('v_stock_movement').select('*')
+        .eq('taken_on', new Date().toISOString().slice(0, 10))
+        .eq('shop', isGodown ? '(godown / company-wide)' : code)
+        .maybeSingle()
+
+      setDone({ ...p, shop: shopRow?.name || 'Godown / company-wide',
+                relink: relink?.[0] || null, movement: mv || null })
       setProgress(null)
       boot()
     } catch (e) {
@@ -215,7 +253,7 @@ export default function StockUpload() {
   }
 
   function reset() {
-    setFile(null); setParsed(null); setDone(null); setError(null); setProgress(null)
+    setFile(null); setParsed(null); setDone(null); setError(null); setProgress(null); setNote('')
   }
 
   return (
@@ -243,6 +281,32 @@ export default function StockUpload() {
             <Cell label="Pieces" value={Math.round(done.pieces).toLocaleString('en-IN')} />
             <Cell label="Stock value" value={lakh(done.value)} />
           </div>
+          {done.movement && done.movement.prev_date && (
+            <div className="border-t border-line px-4 py-3">
+              <div className="text-sm font-semibold">
+                Since {dt(done.movement.prev_date)}
+                {done.movement.days_between > 1 &&
+                  ` — ${done.movement.days_between} days`}
+              </div>
+              <div className="mt-1.5 grid grid-cols-3 gap-3 text-sm">
+                <Move label="Value"
+                  value={lakh(Math.abs(done.movement.value_change))}
+                  up={done.movement.value_change > 0}
+                  pct={done.movement.value_change_pct} />
+                <Move label="Pieces"
+                  value={Math.abs(Math.round(done.movement.pieces_change)).toLocaleString('en-IN')}
+                  up={done.movement.pieces_change > 0} />
+                <Move label="Barcodes"
+                  value={Math.abs(done.movement.barcode_change).toLocaleString('en-IN')}
+                  up={done.movement.barcode_change > 0} />
+              </div>
+              <p className="mt-1.5 text-2xs text-slate2">
+                Stock falling is normal — it means the shop sold. Rising means goods
+                arrived. A big jump either way with no reason is worth a look.
+              </p>
+            </div>
+          )}
+
           {done.relink && (
             <div className="border-t border-line bg-paper px-4 py-3 text-sm">
               <strong>{Number(done.relink.rows_updated).toLocaleString('en-IN')}</strong> older
@@ -268,6 +332,7 @@ export default function StockUpload() {
             <label>Which shop is this file from *</label>
             <select value={shop} onChange={e => setShop(e.target.value)}>
               <option value="">Choose the shop</option>
+              <option value={GODOWN}>Godown / company-wide</option>
               {shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             <p className="mt-1 text-2xs text-slate2">
@@ -320,6 +385,14 @@ export default function StockUpload() {
             </div>
           )}
 
+          {locked && (
+            <div className="border-t border-line bg-gold2 px-4 py-3 text-sm text-gold">
+              <strong>This shop has already been uploaded today.</strong>{' '}
+              {Number(locked.rows_loaded).toLocaleString('en-IN')} rows,
+              {' '}{lakh(locked.total_value)}. Clear it below before loading again.
+            </div>
+          )}
+
           {parsed.totalRows > 0 && (
             <div className="border-t border-line px-4 py-2.5 text-xs text-slate2">
               {parsed.totalRows} totals {parsed.totalRows === 1 ? 'row' : 'rows'} at the
@@ -334,14 +407,24 @@ export default function StockUpload() {
           )}
 
           <div className="border-t border-line p-4">
+            <label>Note (optional)</label>
+            <textarea rows={2} value={note} onChange={e => setNote(e.target.value)}
+              placeholder="Stock take done on Saturday, three lines written off" />
+            <p className="mb-3 mt-1 text-2xs text-slate2">
+              Kept with the day. Worth writing when the movement will look odd —
+              a stock take, a big transfer, a shop shut.
+            </p>
+
             {progress && (
               <div className="mb-3 rounded-md bg-paper px-3 py-2.5 text-sm text-slate2">
                 {progress}
               </div>
             )}
-            <button className="btn-dark w-full" disabled={busy || !shop} onClick={upload}>
+            <button className="btn-dark w-full" disabled={busy || !shop || !!locked}
+              onClick={upload}>
               {busy ? 'Uploading…'
                 : !shop ? 'Choose the shop first'
+                : locked ? 'Already uploaded today — clear it first'
                 : `Upload ${parsed.all.length.toLocaleString('en-IN')} barcodes`}
             </button>
             {parsed.all.length > 20000 && !busy && (
@@ -365,30 +448,94 @@ export default function StockUpload() {
         ) : (
           <ul className="card divide-y divide-line">
             {recent.map((r, i) => (
-              <li key={i} className="flex items-center gap-3 px-4 py-3">
+              <li key={i} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <span className={'h-2.5 w-2.5 shrink-0 rounded-full ' +
                   (r.counts_as_stock ? 'bg-good' : 'bg-line2')} />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium">
-                    {r.shop === '(no shop)' ? 'Company-wide / godown' : r.shop}
-                    {' · '}{dt(r.taken_on)}
+                    {r.shop} · {dt(r.taken_on)}
                   </span>
                   <span className="block truncate text-2xs text-slate2">
                     {Number(r.rows_loaded).toLocaleString('en-IN')} rows ·{' '}
-                    {lakh(r.total_value)} · {r.source_file}
+                    {lakh(r.total_value)}
+                    {r.prev_date && (
+                      <span className={r.value_change >= 0 ? ' text-good' : ' text-bad'}>
+                        {' · '}{r.value_change >= 0 ? '+' : '−'}{lakh(Math.abs(r.value_change))}
+                        {r.value_change_pct != null && ` (${num(Math.abs(r.value_change_pct), 1)}%)`}
+                        {r.days_between > 1 && ` over ${r.days_between} days`}
+                      </span>
+                    )}
                   </span>
+                  {r.note && (
+                    <span className="mt-0.5 block text-2xs text-gold">{r.note}</span>
+                  )}
                   {!r.counts_as_stock && (
-                    <span className="mt-0.5 block text-2xs text-gold">
-                      Used to classify sales only — not added to the stock figures,
-                      because the branch files already hold these goods.
+                    <span className="mt-0.5 block text-2xs text-slate2">
+                      Classification only — not counted as stock.
                     </span>
                   )}
                 </span>
+                <button className="btn-ghost btn-sm !text-bad"
+                  onClick={() => { setClearing(r); setClearWhy('') }}>
+                  Clear
+                </button>
               </li>
             ))}
           </ul>
         )}
       </section>
+      {clearing && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 md:items-center"
+          onClick={() => setClearing(null)}>
+          <div className="safe-b w-full max-w-md rounded-t-xl bg-white p-5 shadow-pop md:rounded-xl"
+            onClick={e => e.stopPropagation()}>
+            <h2 className="text-base font-semibold">
+              Clear {clearing.shop} · {dt(clearing.taken_on)}
+            </h2>
+            <p className="mt-1 text-sm text-slate2">
+              {Number(clearing.rows_loaded).toLocaleString('en-IN')} rows worth
+              {' '}{lakh(clearing.total_value)} go. The barcodes stay, so sales keep
+              their division and supplier.
+            </p>
+            <div className="mt-3">
+              <label>Why *</label>
+              <textarea rows={2} value={clearWhy} autoFocus
+                placeholder="Wrong file — this was yesterday's export"
+                onChange={e => setClearWhy(e.target.value)} />
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button className="btn-bad flex-1" disabled={busy || !clearWhy.trim()}
+                onClick={async () => {
+                  setBusy(true)
+                  const { error } = await db.rpc('clear_stock_day', {
+                    p_shop_code: clearing.shop === '(godown / company-wide)' ? 'GODOWN' : clearing.shop,
+                    p_date: clearing.taken_on, p_reason: clearWhy.trim()
+                  })
+                  setBusy(false)
+                  if (error) return setError(error.message)
+                  setClearing(null); setLocked(null); boot()
+                }}>
+                {busy ? 'Clearing' : 'Clear it'}
+              </button>
+              <button className="btn-ghost" onClick={() => setClearing(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Move({ label, value, up, pct }) {
+  return (
+    <div>
+      <div className="stat-label">{label}</div>
+      <div className={'text-base font-semibold ' + (up ? 'text-good' : 'text-bad')}>
+        {up ? '+' : '−'}{value}
+      </div>
+      {pct != null && (
+        <div className="text-2xs text-slate2">{num(Math.abs(pct), 1)}%</div>
+      )}
     </div>
   )
 }
