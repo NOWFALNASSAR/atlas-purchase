@@ -23,6 +23,7 @@ const TABS = [
   ['tax',       'Tax'],
   ['customers', 'Customers'],
   ['returns',   'Returns'],
+  ['belowcost', 'Below cost'],
   ['trend',     'Trend']
 ]
 
@@ -66,13 +67,15 @@ export default function SalesReports() {
         only(db.from('v_sales_tax').select('*').eq('sale_date', date)),
         db.from('v_customers').select('*').order('spent', { ascending: false }).limit(300),
         only(db.from('v_sales_returns').select('*').eq('sale_date', date)),
+        only(db.from('v_sales_below_cost').select('*').eq('sale_date', date)),
         db.from('v_sales_day_full').select('*').order('sale_date', { ascending: false }).limit(60)
       ])
       setD(x => ({
         ...x,
         day: day.data || [], people: people.data || [], items: items.data || [],
         divi: divi.data || [], sup: sup.data || [], tax: tax.data || [],
-        cust: cust.data || [], ret: ret.data || [], trend: trend.data || []
+        cust: cust.data || [], ret: ret.data || [], below: below.data || [],
+        trend: trend.data || []
       }))
       setFailed(null)
     } catch (e) { setFailed(e.message) }
@@ -102,7 +105,8 @@ export default function SalesReports() {
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), n.slice(0, 31))
     add('Day', d.day); add('Salesmen', d.people); add('Items', d.items)
     add('Divisions', d.divi); add('Suppliers', d.sup); add('Tax', d.tax)
-    add('Customers', d.cust); add('Returns', d.ret); add('Trend', d.trend)
+    add('Customers', d.cust); add('Returns', d.ret)
+    add('Below cost', d.below); add('Trend', d.trend)
     XLSX.writeFile(wb, `Sales ${date}${branch === 'all' ? '' : ' ' + branch}.xlsx`)
   }
 
@@ -270,6 +274,23 @@ export default function SalesReports() {
                 r.barcode, r.item_name || '—', num(r.qty, 0),
                 inr(r.value_extax), inr(r.cost), inr(r.margin)
               ])} />
+          )}
+
+          {tab === 'belowcost' && (
+            <>
+              <p className="text-xs text-slate2">
+                Sold at or below what it cost. Usually a keying mistake at the till —
+                one barcode that day went out at 1 paisa against a 225 cost — and
+                exactly the sort of thing nobody notices unless someone looks.
+              </p>
+              <Table head={['Barcode', 'Item', 'Qty', 'Sold for', 'Cost', 'Loss', 'Margin %']}
+                align="llrrrrr"
+                rows={(d.below || []).map(r => [
+                  r.barcode, r.item_name || '—', num(r.qty, 0),
+                  inr(r.value_extax), inr(r.cost), inr(r.margin),
+                  r.margin_pct == null ? '—' : num(r.margin_pct, 0) + '%'
+                ])} />
+            </>
           )}
 
           {tab === 'trend' && (
