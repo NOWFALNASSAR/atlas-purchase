@@ -5,6 +5,16 @@ import App from './App.jsx'
 import { configured, missingSetting } from './lib/db'
 import './index.css'
 
+/* The service worker is what makes the app installable. It is
+   registered only in a real build — during development it would just
+   get in the way of seeing your own changes. */
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(err =>
+      console.warn('Service worker did not register:', err))
+  })
+}
+
 /* ==================================================================
    A blank white page is the worst thing this app can do, because it
    tells nobody anything. Two guards stop it:

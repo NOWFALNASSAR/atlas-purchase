@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { db, dt } from '../lib/db'
-import { eodMessage, taskMessage, openWhatsApp, shareOrCopy } from '../lib/wa'
+import { eodMessage, taskMessage } from '../lib/wa'
+import { openWhatsApp } from '../lib/share'
+import SendPdfSheet from '../components/SendPdfSheet'
 
 /* ==================================================================
    END OF DAY
@@ -29,6 +31,7 @@ export default function Eod() {
   const [busy, setBusy] = useState(null)
   const [toast, setToast] = useState(null)
   const [filter, setFilter] = useState('all')
+  const [sending, setSending] = useState(false)
 
   useEffect(() => { load() }, [])
   useEffect(() => {
@@ -146,20 +149,11 @@ export default function Eod() {
     return doc
   }
 
-  function downloadPdf() {
-    buildPdf().save(`EOD ${new Date().toISOString().slice(0, 10)}.pdf`)
-    setToast('PDF downloaded. Attach it in WhatsApp after pasting the message.')
-  }
+  const pdfName = () => `EOD ${new Date().toISOString().slice(0, 10)}.pdf`
 
-  async function sendToGroup() {
-    const text = eodMessage(rows, company)
-    buildPdf().save(`EOD ${new Date().toISOString().slice(0, 10)}.pdf`)
-    const how = await shareOrCopy(text, 'End of day')
-    setToast(how === 'shared'
-      ? 'Pick your HOD group, then attach the PDF that just downloaded.'
-      : how === 'copied'
-        ? 'Message copied and PDF downloaded. Open your HOD group, paste, attach.'
-        : 'Could not copy. Select the message on screen and copy it by hand.')
+  function downloadPdf() {
+    buildPdf().save(pdfName())
+    setToast('PDF downloaded.')
   }
 
   if (failed) return (
@@ -186,7 +180,9 @@ export default function Eod() {
         </div>
         <div className="flex gap-2">
           <button className="btn-ghost btn-sm" onClick={downloadPdf}>PDF only</button>
-          <button className="btn-dark btn-sm" onClick={sendToGroup}>Send to HOD group</button>
+          <button className="btn-dark btn-sm" onClick={() => setSending(true)}>
+            Send to HOD group
+          </button>
         </div>
       </div>
 
@@ -269,6 +265,18 @@ export default function Eod() {
             </li>
           ))}
         </ul>
+      )}
+
+      {sending && (
+        <SendPdfSheet
+          title="Send end of day"
+          filename={pdfName()}
+          message={eodMessage(rows, company)}
+          build={() => buildPdf().output('blob')}
+          bucket="po-pdfs"
+          folder="eod"
+          onClose={() => setSending(false)}
+        />
       )}
 
       {toast && (

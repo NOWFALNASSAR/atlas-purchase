@@ -1,0 +1,44 @@
+-- =====================================================================
+-- ATLAS  |  32_fix_schedule_fn.sql
+--
+-- FIXES: function schedule_next_date(...) is not unique
+--
+-- Migration 21 created a four-argument version. Migration 31 added two
+-- optional arguments for weekly and yearly patterns — but adding
+-- optional arguments creates a SECOND function rather than replacing
+-- the first, because the signature changed.
+--
+-- So a four-argument call matched both, and Postgres refused to guess.
+-- My oversight: 31 should have dropped the old one before creating the
+-- new. This does that.
+--
+-- Nothing else is affected. run_task_schedules already calls the six
+-- argument version explicitly, so scheduling has been working; only a
+-- direct four-argument call was ambiguous.
+--
+-- Run after 31. Safe to re-run.
+-- =====================================================================
+
+drop function if exists schedule_next_date(text, int, int, date);
+
+-- ---------------------------------------------------------------------
+-- Prove there is now exactly one:
+--
+--   select oid::regprocedure as signature
+--     from pg_proc where proname = 'schedule_next_date';
+--
+-- Then the checks work without casts:
+--
+--   select schedule_next_date('daily',     null, null, current_date);
+--   select schedule_next_date('weekly',    null, null, current_date, 1);
+--   select schedule_next_date('monthly',   5,    null, current_date);
+--   select schedule_next_date('quarterly', 5,    null, current_date);
+--   select schedule_next_date('yearly',    1,    null, current_date, null, 4);
+--
+-- Expected from a date in early September 2026:
+--   daily      tomorrow
+--   weekly     the coming Monday
+--   monthly    5th of next month
+--   quarterly  5 October
+--   yearly     1 April next year
+-- ---------------------------------------------------------------------

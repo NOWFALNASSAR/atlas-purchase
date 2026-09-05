@@ -181,8 +181,18 @@ create index if not exists idx_tasks_to_status    on tasks (to_dept, status);
 create index if not exists idx_tasks_from_status  on tasks (from_dept, status);
 create index if not exists idx_tasks_assigned     on tasks (assigned_to) where assigned_to is not null;
 create index if not exists idx_tasks_raised_by    on tasks (raised_by);
-create index if not exists idx_tasks_created_day  on tasks ((created_at::date));
-create index if not exists idx_tasks_closed_day   on tasks ((closed_at::date)) where closed_at is not null;
+-- Plain column indexes, not expression indexes on (created_at::date).
+--
+-- Casting a timestamptz to a date depends on the server's TimeZone
+-- setting, so Postgres will not allow it in an index — the value could
+-- change without the row changing. Pinning a zone would make it legal
+-- but the index would then only be used by queries written the same
+-- way, which ours are not.
+--
+-- A plain index on the column still serves range queries and ordering,
+-- which is most of what these columns are used for.
+create index if not exists idx_tasks_created_at   on tasks (created_at desc);
+create index if not exists idx_tasks_closed_at    on tasks (closed_at desc) where closed_at is not null;
 
 -- ---------------------------------------------------------------------
 --   select * from v_task_counts;
