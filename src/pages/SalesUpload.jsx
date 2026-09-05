@@ -21,6 +21,20 @@ import { db, inr, lakh, dt, num } from '../lib/db'
    only MD Office can do it.
    ================================================================== */
 
+/* Above this the difference is worth explaining, but the upload still
+   goes ahead.
+
+   Blocking was the wrong trade. A refused upload means no figures at
+   all for that day, which is worse than figures with a known gap
+   written against them. So: always upload, always record the
+   difference, and ask for a note when it is more than rounding.
+
+   v_upload_variances lists every day that did not agree, worst first.
+   A branch that is a few thousand out every day is exporting its files
+   before closing, and that pattern is only visible if the days were
+   loaded in the first place. */
+const TOLERANCE = 1000
+
 const FILES = [
   ['bill', 'BILLWISE',     'One row per bill — the day, the branch and the tax split come from here', true],
   ['item', 'ITEMWISE',     'One row per barcode — quantity, value, cost and margin',                  true],
@@ -33,6 +47,7 @@ export default function SalesUpload() {
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(null)
+  const [note, setNote] = useState('')
   const [status, setStatus] = useState([])
   const [locked, setLocked] = useState(false)
   const inputs = { bill: useRef(), item: useRef(), man: useRef() }
@@ -135,7 +150,9 @@ export default function SalesUpload() {
       }
 
       const variance = files.item ? Math.round((itemTotal - taxable) * 100) / 100 : 0
-      const reconciled = Math.abs(variance) <= 1
+      const gap = Math.abs(variance)
+      const reconciled = gap <= TOLERANCE
+      const exact = gap <= 1
 
       // already uploaded?
       const { data: existing } = await db.from('sales_uploads')
@@ -143,16 +160,29 @@ export default function SalesUpload() {
       if (existing) setLocked(true)
 
       setParsed({ date, branch, billRows, items, people, live, amount, taxable, tax,
-                  itemTotal, cost, margin, discount, pieces, variance, reconciled, existing })
+                  itemTotal, cost, margin, discount, pieces, variance, reconciled,
+                  exact, existing })
     } catch (e) {
       setError(e.message)
     }
   }
 
+  /* What gets written against the day. The measured difference always,
+     plus whatever the person typed. */
+  function noteText(p) {
+    const bits = []
+    if (p && Math.abs(p.variance) > 1) {
+      bits.push(`Bill file and item file ${inr(Math.abs(p.variance))} apart ` +
+                `(bills ${inr(p.taxable)}, items ${inr(p.itemTotal)}).`)
+    }
+    if (note.trim()) bits.push(note.trim())
+    return bits.length ? bits.join(' ') : null
+  }
+
   /* ---------- writing it ---------- */
 
   async function upload() {
-    if (!parsed || !parsed.reconciled || locked) return
+    if (!parsed || locked) return
     setBusy(true); setError(null)
     const p = parsed
     try {
@@ -200,7 +230,9 @@ export default function SalesUpload() {
         sale_date: p.date, branch_code: p.branch, bills: p.live,
         amount: p.amount, taxable: p.taxable, tax_total: p.tax,
         cost: p.cost, margin: p.margin, discount: p.discount, qty: p.pieces,
-        reconciled: p.reconciled, variance: p.variance, locked: true, source: 'app'
+        reconciled: p.exact, variance: p.variance,
+        variance_pct: p.taxable ? Math.round(p.variance / p.taxable * 100000) / 1000 : null,
+        note: noteText(p), locked: true, source: 'app'
       })
       if (upErr) throw upErr
 
@@ -216,19 +248,24 @@ export default function SalesUpload() {
     setBusy(false)
   }
 
-  async function unlock(row) {
-    const why = prompt(`Upload ${dt(row.sale_date)} for ${row.branch_code} again?\n\nThe day already in will be removed first.\nSay why:`)
-    if (!why?.trim()) return
+  const [clearing, setClearing] = useState(null)
+  const [clearWhy, setClearWhy] = useState('')
+
+  async function doClear() {
+    if (!clearWhy.trim()) return
+    setBusy(true)
     const { error } = await db.rpc('unlock_sales_day', {
-      p_branch: row.branch_code, p_date: row.sale_date, p_reason: why.trim()
+      p_branch: clearing.branch_code, p_date: clearing.sale_date, p_reason: clearWhy.trim()
     })
+    setBusy(false)
     if (error) return setError(error.message)
+    setClearing(null); setClearWhy('')
     setLocked(false)
     loadStatus()
   }
 
   function reset() {
-    setFiles({}); setParsed(null); setDone(null); setError(null); setLocked(false)
+    setFiles({}); setParsed(null); setDone(null); setError(null); setLocked(false); setNote('')
     Object.values(inputs).forEach(r => { if (r.current) r.current.value = '' })
   }
 
@@ -327,21 +364,47 @@ export default function SalesUpload() {
 
           {/* the reconciliation */}
           <div className={'border-t border-line px-4 py-3 text-sm ' +
-            (parsed.reconciled ? 'bg-good/10 text-good' : 'bg-bad/10 text-bad')}>
-            {parsed.reconciled ? (
+            (parsed.exact ? 'bg-good/10 text-good'
+             : parsed.reconciled ? 'bg-gold2 text-gold'
+             : 'bg-bad/10 text-bad')}>
+            {parsed.exact ? (
               <>
                 <strong>The files agree.</strong> Bill file and item file both give{' '}
                 {inr(parsed.taxable)} without tax.
               </>
+            ) : parsed.reconciled ? (
+              <>
+                <strong>{inr(Math.abs(parsed.variance))} apart — close enough.</strong>{' '}
+                Bills say {inr(parsed.taxable)}, items say {inr(parsed.itemTotal)}.
+                Under {inr(TOLERANCE)} is rounding on the tax split, so the upload can
+                go ahead. The difference is recorded against the day.
+              </>
             ) : (
               <>
-                <strong>The files disagree by {inr(Math.abs(parsed.variance))}.</strong>{' '}
-                Bills say {inr(parsed.taxable)}, items say {inr(parsed.itemTotal)}.
-                This usually means one was exported while the shop was still trading.
-                Export both again after closing.
+                <strong>{inr(Math.abs(parsed.variance))} apart.</strong>{' '}
+                Bills say {inr(parsed.taxable)}, items say {inr(parsed.itemTotal)} —
+                that is {num(Math.abs(parsed.variance) / parsed.taxable * 100, 2)}% of
+                the day. More than rounding, so it usually means one file was exported
+                before closing. It will upload either way; please say what you know
+                below so the figure is not a mystery next month.
               </>
             )}
           </div>
+
+          {Math.abs(parsed.variance) > 1 && (
+            <div className="border-t border-line p-4">
+              <label>
+                Note about the difference
+                {Math.abs(parsed.variance) > TOLERANCE && <span className="ml-1 text-bad">*</span>}
+              </label>
+              <textarea rows={2} value={note} onChange={e => setNote(e.target.value)}
+                placeholder="Item file exported at 4pm, before the last few bills" />
+              <p className="mt-1 text-2xs text-slate2">
+                Stored with the day. The measured difference is recorded automatically
+                whether or not you add anything.
+              </p>
+            </div>
+          )}
 
           {locked && (
             <div className="border-t border-line bg-gold2 px-4 py-3 text-sm text-gold">
@@ -351,12 +414,15 @@ export default function SalesUpload() {
           )}
 
           <div className="border-t border-line p-4">
-            <button className="btn-dark w-full" disabled={busy || !parsed.reconciled || locked}
+            <button className="btn-dark w-full"
+              disabled={busy || locked ||
+                        (Math.abs(parsed.variance) > TOLERANCE && !note.trim())}
               onClick={upload}>
               {busy ? 'Uploading…'
                 : locked ? 'Already uploaded'
-                : !parsed.reconciled ? 'Cannot upload — the files disagree'
-                : `Upload ${parsed.live} bills and ${parsed.items.length} barcodes`}
+                : (Math.abs(parsed.variance) > TOLERANCE && !note.trim())
+                  ? 'Add a note about the difference first'
+                  : `Upload ${parsed.live} bills and ${parsed.items.length} barcodes`}
             </button>
           </div>
         </div>
@@ -380,12 +446,15 @@ export default function SalesUpload() {
                   <span className="block text-2xs text-slate2">
                     {r.bills} bills · {inr(r.taxable)} without tax · {r.barcode_rows} barcodes
                     {r.uploaded_by_name && ' · ' + r.uploaded_by_name}
-                    {!r.reconciled && ' · files disagreed by ' + inr(r.variance)}
+                    {r.gap !== 'exact' && ' · ' + inr(Math.abs(r.variance)) + ' apart'}
                   </span>
+                  {r.note && (
+                    <span className="mt-0.5 block text-2xs text-gold">{r.note}</span>
+                  )}
                 </span>
-                <button className="text-xs font-semibold text-slate2 hover:text-bad"
-                  onClick={() => unlock(r)}>
-                  Unlock
+                <button className="btn-ghost btn-sm !text-bad"
+                  onClick={() => { setClearing(r); setClearWhy('') }}>
+                  Clear this day
                 </button>
               </li>
             ))}
@@ -393,9 +462,48 @@ export default function SalesUpload() {
         )}
         <p className="mt-2 text-2xs text-slate2">
           A green switch means that day is in and locked. Loading the same day twice is
-          how a month's figures double, so unlocking needs a reason and is recorded.
+          how a month's figures double, so clearing one needs a reason and is recorded.
         </p>
       </section>
+
+      {clearing && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 md:items-center"
+          onClick={() => setClearing(null)}>
+          <div className="safe-b w-full max-w-md rounded-t-xl bg-white p-5 shadow-pop md:rounded-xl"
+            onClick={e => e.stopPropagation()}>
+            <h2 className="text-base font-semibold">
+              Clear {clearing.branch_code} · {dt(clearing.sale_date)}
+            </h2>
+            <p className="mt-1 text-sm text-slate2">
+              Everything for that day goes: {clearing.bills} bills,
+              {' '}{clearing.barcode_rows} barcodes, {clearing.person_rows} salesmen,
+              {' '}{inr(clearing.taxable)} without tax.
+            </p>
+
+            <div className="mt-3 rounded-md bg-bad/[.06] px-3 py-2.5 text-xs text-bad">
+              The reports will show nothing for this day until you upload it again.
+            </div>
+
+            <div className="mt-3">
+              <label>Why *</label>
+              <textarea rows={2} value={clearWhy} autoFocus
+                placeholder="Exported before closing, figures were short"
+                onChange={e => setClearWhy(e.target.value)} />
+              <p className="mt-1 text-2xs text-slate2">
+                Kept with your name and the time.
+              </p>
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button className="btn-bad flex-1" disabled={busy || !clearWhy.trim()}
+                onClick={doClear}>
+                {busy ? 'Clearing' : 'Clear the day'}
+              </button>
+              <button className="btn-ghost" onClick={() => setClearing(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
