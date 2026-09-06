@@ -98,3 +98,28 @@ export async function photoUrl(path, seconds = 3600) {
   const { data } = await db.storage.from('po-photos').createSignedUrl(path, seconds)
   return data?.signedUrl
 }
+
+
+/* ==================================================================
+   FETCHING MORE THAN A THOUSAND ROWS
+
+   Supabase returns at most 1,000 rows per request and says nothing
+   about the rest. With 1,851 suppliers ordered by name, everything
+   from about P onwards never reached the app — so PONN`S APPARELS was
+   in the database, granted, indexed, and invisible.
+
+   Nothing in the response says it was truncated. That is what made it
+   so hard to find: the query succeeds, the list looks complete, and
+   the missing rows are all at one end of the alphabet.
+   ================================================================== */
+
+export async function fetchAll(build, { page = 1000, max = 50000 } = {}) {
+  const out = []
+  for (let from = 0; from < max; from += page) {
+    const { data, error } = await build().range(from, from + page - 1)
+    if (error) return { data: out, error }
+    out.push(...(data || []))
+    if (!data || data.length < page) break
+  }
+  return { data: out, error: null }
+}

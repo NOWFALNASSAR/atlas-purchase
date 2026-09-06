@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { db } from '../lib/db'
+import { db, fetchAll } from '../lib/db'
 import { useMe } from '../App'
 import Picker from '../components/Picker'
 import Field from '../components/Field'
@@ -32,7 +32,7 @@ export default function NewPO() {
           setF(v => ({ ...v, entity_id: allowed[0].id }))
         }
       })
-    db.from('suppliers').select('*').eq('active', true).order('name')
+    fetchAll(() => db.from('suppliers').select('*').eq('active', true).order('name'))
       .then(({ data }) => setSuppliers(data || []))
     db.from('settings').select('value').eq('key', 'tax_rates').single()
       .then(({ data }) => setTaxRates(data?.value || [0, 5, 12, 18, 28]))

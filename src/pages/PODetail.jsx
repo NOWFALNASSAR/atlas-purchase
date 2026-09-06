@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { db, inr, dt, dtTime, statusStyle, roleLabel, margin } from '../lib/db'
+import { db, inr, dt, dtTime, statusStyle, roleLabel, margin, fetchAll } from '../lib/db'
 import { downloadPoPdf, buildPoPdf, poMessage } from '../lib/pdf'
 import SendPdfSheet from '../components/SendPdfSheet'
 import { uploadPdfForLink, copyText } from '../lib/share'
@@ -42,12 +42,12 @@ export default function PODetail() {
       await Promise.all([
         db.from('po_items').select('*').eq('po_id', id).order('sort_order'),
         db.from('po_item_allocations').select('*, shops(code,name)').eq('po_id', id),
-        db.from('items').select('*').eq('active', true).order('name'),
+        fetchAll(() => db.from('items').select('*').eq('active', true).order('name')),
         /* What this supplier has actually supplied, with the rate and
            the date. Ordering from a list of 11,000 items when a
            supplier sells you forty of them is how the wrong item gets
            picked. */
-        db.from('v_supplier_items').select('*').order('last_date', { ascending: false }),
+        fetchAll(() => db.from('v_supplier_items').select('*').order('last_date', { ascending: false })),
         db.from('shops').select('*').eq('active', true).eq('entity_id', p.entity_id).order('code'),
         db.from('po_history').select('*').eq('po_id', id).order('created_at', { ascending: false }),
         db.from('settings').select('value').eq('key', 'company').single()

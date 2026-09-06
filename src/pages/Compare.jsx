@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { db, inr, dt, margin } from '../lib/db'
+import { db, inr, dt, margin, fetchAll } from '../lib/db'
 import Picker from '../components/Picker'
 
 /** Pick an item → see every supplier who supplied it, and at what rate. */
@@ -11,7 +11,7 @@ export default function Compare() {
   const [similar, setSimilar] = useState([])
 
   useEffect(() => {
-    db.from('items').select('*').eq('active', true).order('name')
+    fetchAll(() => db.from('items').select('*').eq('active', true).order('name'))
       .then(({ data }) => setItems(data || []))
   }, [])
 

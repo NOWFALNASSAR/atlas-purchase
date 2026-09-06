@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
-import { db, lakh, inr, dt, num } from '../lib/db'
+import { db, lakh, inr, dt, num, fetchAll } from '../lib/db'
 
 /* ==================================================================
    STOCK REPORTS
@@ -85,10 +85,9 @@ export default function StockReports() {
           /* Newest arrival first. An item master sorted by name is a
              dictionary; sorted by arrival it shows what has just come
              in, which is what someone opening this actually wants. */
-          db.from('v_items_seen').select('*')
-            .order('last_arrival', { ascending: false, nullsFirst: false })
-            .limit(2000),
-          db.from('suppliers').select('*').eq('active', true).order('name').limit(500),
+          fetchAll(() => db.from('v_items_seen').select('*')
+            .order('last_arrival', { ascending: false, nullsFirst: false })),
+          fetchAll(() => db.from('suppliers').select('*').eq('active', true).order('name')),
           db.from('v_stock_by_shop').select('*').order('value', { ascending: false }),
           shop === 'all'
             ? db.from('v_stock_group_all').select('*').order('value', { ascending: false })
