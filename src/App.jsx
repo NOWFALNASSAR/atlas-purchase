@@ -10,6 +10,7 @@ import MisDashboard from './pages/MisDashboard'
 import PurchaseDashboard from './pages/PurchaseDashboard'
 import PurchaseTargets  from './pages/PurchaseTargets'
 import POList    from './pages/POList'
+import PoReceiving from './pages/PoReceiving'
 import NewPO     from './pages/NewPO'
 import PODetail  from './pages/PODetail'
 import Suppliers from './pages/Suppliers'
@@ -102,6 +103,7 @@ const MODULES = [
       { to: '/orders/new',  label: 'New order',       short: 'New',      perm: 'po.create' },
       { to: '/compare',     label: 'Rate compare',    short: 'Rates',    perm: 'compare.view' },
       { to: '/reports',     label: 'Order reports',   short: 'Reports',  perm: 'reports.view' },
+      { to: '/orders/receiving', label: 'Goods received', short: 'Received', perm: 'po.receive' },
       { to: '/purchase/targets', label: 'Targets',    short: 'Targets',  perm: 'purchase.targets' },
       { to: '/insights',    label: 'Insights',        short: 'Insights', perm: 'insights.view' }
     ]
@@ -247,6 +249,7 @@ export default function App() {
           <Route path="/orders/:id"       element={<Need p="po.view"><PODetail /></Need>} />
           <Route path="/compare"          element={<Need p="compare.view"><Compare /></Need>} />
           <Route path="/reports"          element={<Need p="reports.view"><Reports /></Need>} />
+          <Route path="/orders/receiving" element={<Need p="po.receive"><PoReceiving /></Need>} />
           <Route path="/purchase/targets" element={<Need p="purchase.targets"><PurchaseTargets /></Need>} />
           <Route path="/insights"         element={<Need p="insights.view"><Insights /></Need>} />
 
@@ -705,6 +708,7 @@ const LEGACY = {
   'sales.targets':   ['admin', 'hod', 'manager'],
   'sales.import':    ['admin'],
   'stock.import':    ['admin'],
+  'po.receive':      ['admin', 'hod', 'manager'],
   'suppliers.view':  ['hod', 'admin'],
   'suppliers.edit':  ['hod', 'admin'],
   'items.view':      ['hod', 'admin'],

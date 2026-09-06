@@ -63,10 +63,12 @@ export default function SalesReports() {
         only(db.from('sales_barcode_daily').select('*').eq('sale_date', date))
           .order('value_extax', { ascending: false }).limit(1000),
         // these three used to ignore the pickers entirely
-        only(db.from('v_sales_division').select('*').eq('sale_date', date))
-          .order('value_extax', { ascending: false }),
-        only(db.from('v_sales_supplier').select('*').eq('sale_date', date))
-          .order('value_extax', { ascending: false }).limit(100),
+        /* Rolled up. v_sales_division carries the date AND the branch,
+           so reading it directly with "all branches" repeats a division
+           once per branch. These add them together and take the branch
+           as an argument. */
+        db.rpc('sales_division_rolled', { p_from: date, p_to: date, p_branch: br }),
+        db.rpc('sales_supplier_rolled',  { p_from: date, p_to: date, p_branch: br }),
         only(db.from('v_sales_tax').select('*').eq('sale_date', date)),
         only(db.from('v_customers').select('*')).order('spent', { ascending: false }).limit(300),
         only(db.from('v_sales_returns').select('*').eq('sale_date', date)),
@@ -248,8 +250,9 @@ export default function SalesReports() {
                   ? ['Division', 'Qty', 'Sales', 'Cost', 'Margin', 'Margin %']
                   : ['Supplier', 'Place', 'Qty', 'Sales', 'Cost', 'Margin', 'Margin %']}
                 align={tab === 'division' ? 'lrrrrr' : 'llrrrrr'}
-                rows={(tab === 'division' ? (d.divi || []) : (d.sup || [])).map(r =>
-                  tab === 'division'
+                rows={[...(tab === 'division' ? (d.divi || []) : (d.sup || []))]
+                  .sort((a, b) => Number(b.value_extax) - Number(a.value_extax))
+                  .map(r => tab === 'division'
                     ? [r.division, num(r.qty, 0), inr(r.value_extax), inr(r.cost),
                        inr(r.margin), r.margin_pct == null ? '—' : num(r.margin_pct, 1) + '%']
                     : [r.supplier, r.place || '—', num(r.qty, 0), inr(r.value_extax),
