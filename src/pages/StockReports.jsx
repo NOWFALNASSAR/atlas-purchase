@@ -77,7 +77,11 @@ export default function StockReports() {
           db.from('v_price_spread').select('*').order('value', { ascending: false }).limit(300),
           only(db.from('v_stock_anomalies').select('*')).limit(200),
           // the unified master, the same rows purchase orders use
-          db.from('items').select('*').eq('active', true).order('name').limit(500),
+          /* What the stock actually contains, not the items table.
+             The upload writes barcodes and stock lines and never
+             touches items, so anything that arrived through the app
+             was missing from this tab entirely. */
+          db.from('v_items_seen').select('*').order('name').limit(2000),
           db.from('suppliers').select('*').eq('active', true).order('name').limit(500),
           db.from('v_stock_by_shop').select('*').order('value', { ascending: false }),
           shop === 'all'
@@ -309,12 +313,21 @@ export default function StockReports() {
 
           {tab === 'items' && (
             <Searchable q={q} setQ={setQ} placeholder="Search item name"
-              rows={data.items} match={(r, t) => (r.name || '').toLowerCase().includes(t)}
-              note="The single item master — the same rows the purchase order screens use. First 500 by name; search to narrow it."
-              head={['Item', 'Code', 'Billing code', 'Unit', 'Tax %', 'Source']}
-              cells={r => [r.name, r.code, r.billing_code ?? '—', r.unit || 'Nos',
-                           num(r.tax_pct, 0) + '%', r.source === 'billing' ? 'billing software' : 'Atlas']}
-              align="llllrl" />
+              rows={data.items}
+              match={(r, t) => (r.name || '').toLowerCase().includes(t) ||
+                               (r.supplier || '').toLowerCase().includes(t)}
+              note="Every item the stock knows about, whichever upload brought it in. Barcodes is how many batches of it exist."
+              head={['Item', 'Division', 'Supplier', 'Barcodes', 'In stock', 'Value', 'Margin %']}
+              cells={r => [
+                r.name,
+                r.division || '—',
+                r.supplier || '—',
+                Number(r.barcodes || 0).toLocaleString('en-IN'),
+                Math.round(r.in_stock || 0).toLocaleString('en-IN'),
+                lakh(r.stock_value),
+                r.margin_pct == null ? '—' : num(r.margin_pct, 1) + '%'
+              ]}
+              align="lllrrrr" />
           )}
 
           {tab === 'suppliers' && (
