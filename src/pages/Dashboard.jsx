@@ -678,6 +678,7 @@ const ageDays = iso =>
    ================================================================== */
 
 function CompanyOverview({ can }) {
+  const [err, setErr] = useState(null)
   const [o, setO] = useState(null)
   const [shops, setShops] = useState([])
   const [groups, setGroups] = useState([])
@@ -691,17 +692,43 @@ function CompanyOverview({ can }) {
       db.from('v_company_by_group').select('*')
     ]).then(([a, b, c]) => {
       if (!live) return
-      if (a.error) return setState('error')
+      if (a.error || b.error || c.error) {
+        setErr((a.error || b.error || c.error).message)
+        return setState('error')
+      }
       setO(a.data || null)
       setShops(b.data || [])
       setGroups(c.data || [])
-      setState('ready')
+      setState(a.data ? 'ready' : 'empty')
     })
     return () => { live = false }
   }, [])
 
   if (state === 'loading') return <div className="card h-40 animate-pulse bg-line2" />
-  if (state === 'error' || !o) return null
+
+  /* Say what is wrong rather than disappearing. This section used to
+     return null on any error, so a missing view looked exactly like an
+     old build — and cost an afternoon of looking in the wrong place. */
+  if (state === 'error') return (
+    <div className="card border-bad/30 bg-bad/[.04] p-4 text-sm text-bad">
+      <div className="font-semibold">The company figures could not be loaded</div>
+      <div className="mt-0.5 break-words">{err}</div>
+      <p className="mt-2 text-xs">
+        If this names a view starting v_company, run these in Supabase, in order:
+        {' '}59_company_overview.sql, 65_shop_map.sql, 66_mis_shop_name.sql.
+      </p>
+    </div>
+  )
+
+  if (state === 'empty' || !o) return (
+    <div className="card p-5 text-sm text-slate2">
+      <div className="font-semibold text-ink">No figures yet</div>
+      <p className="mt-0.5">
+        Upload a day of sales and a stock file and this fills in. The two buttons
+        below take you there.
+      </p>
+    </div>
+  )
 
   return (
     <section className="space-y-3">
