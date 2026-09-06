@@ -105,14 +105,35 @@ export function detectShop(name, aliases) {
     .replace(/[_\-]+/g, ' ')
     .toUpperCase()
 
+  const tokens = clean.split(/[^A-Z0-9]+/).filter(Boolean)
+  const squashed = clean.replace(/[^A-Z0-9]+/g, '')
+
   // longest alias first, so KADAKKAL wins over KADS
   const sorted = [...aliases].sort((a, b) => b.label.length - a.label.length)
+
   for (const a of sorted) {
-    const label = a.label.toUpperCase()
+    const label = (a.label || '').toUpperCase()
     if (label.length < 3) continue
+
+    /* A shop CODE must be its own word.
+
+       ITEMWISE_SALES_03-Sep-2026 was matching shop S03, because "S03"
+       sits inside "SALES03". The file was then filed under the wrong
+       shop and never paired with its BILLWISE — which is why only one
+       day of a multi-day zip ever loaded.
+
+       Codes are short and look like fragments of ordinary words, so
+       they only count as a whole token. Real names are distinctive
+       enough to match anywhere. */
+    const isCode = /^[A-Z]{1,3}\d{1,3}$/.test(label)
+
+    if (isCode) {
+      if (tokens.includes(label)) return a.shop_name
+      continue
+    }
+
     if (clean.includes(label)) return a.shop_name
-    // also try without spaces: GANDHISQUARE against GANDHI SQUARE
-    if (clean.replace(/\s+/g, '').includes(label.replace(/\s+/g, ''))) return a.shop_name
+    if (squashed.includes(label.replace(/[^A-Z0-9]+/g, ''))) return a.shop_name
   }
   return null
 }
@@ -147,4 +168,32 @@ export function groupFiles(entries, aliases) {
     // a bill file with no item file cannot be reconciled
     salesIncomplete: !!g.files.bill !== !!g.files.item
   }))
+}
+
+
+/* ---------- the date in a file name ---------- */
+
+/* The billing exports carry their EXPORT date, which is usually the
+   day after the trading they describe — ITEMWISE_SALES_05-Sep-2026
+   holds the 4th. So this is only ever used to pair files with each
+   other, never to decide what day a sale happened. That comes from
+   inside BILLWISE. */
+
+const MONTHS = { JAN:1, FEB:2, MAR:3, APR:4, MAY:5, JUN:6,
+                 JUL:7, AUG:8, SEP:9, OCT:10, NOV:11, DEC:12 }
+
+export function dateInName(name) {
+  const s = name.toUpperCase()
+  let m = s.match(/(\d{1,2})[-_ ]([A-Z]{3})[A-Z]*[-_ ](\d{4})/)
+  if (m) return `${m[3]}-${String(MONTHS[m[2]]).padStart(2, '0')}-${m[1].padStart(2, '0')}`
+  m = s.match(/(\d{4})[-_](\d{2})[-_](\d{2})/)
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`
+  m = s.match(/(\d{2})[-_](\d{2})[-_](\d{4})/)
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`
+  return null
+}
+
+export const daysApart = (a, b) => {
+  if (!a || !b) return 99
+  return Math.abs((new Date(a) - new Date(b)) / 86400000)
 }

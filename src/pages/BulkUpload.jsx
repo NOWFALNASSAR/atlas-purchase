@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { db, inr, lakh, dt, num } from '../lib/db'
-import { readZip, detectKind, detectShop, groupFiles, KIND_LABEL } from '../lib/zip'
+import { readZip, detectKind, detectShop, KIND_LABEL, dateInName, daysApart } from '../lib/zip'
 
 /* ==================================================================
    BULK UPLOAD
@@ -57,57 +57,98 @@ export default function BulkUpload() {
     try {
       const entries = await readZip(file)
       if (!entries.length) throw new Error('The zip has no files in it')
-      let g = groupFiles(entries, aliases)
 
-      // drop the kinds this page is not here for
-      if (only) {
-        const wanted = only === 'sales' ? ['bill', 'item', 'salesman'] : ['stock']
-        for (const grp of g) {
-          for (const k of Object.keys(grp.files)) {
-            if (!wanted.includes(k)) { grp.skipped = (grp.skipped || 0) + 1; delete grp.files[k] }
-          }
-        }
-        g = g.filter(x => Object.keys(x.files).length > 0)
+      const wanted = only === 'sales' ? ['bill', 'item', 'salesman']
+                   : only === 'stock' ? ['stock']
+                   : ['bill', 'item', 'salesman', 'stock']
+
+      const kept = [], ignoredKind = []
+      for (const e of entries) {
+        const kind = detectKind(e.base)
+        if (!kind) { kept.push({ ...e, kind: null }); continue }
+        if (!wanted.includes(kind)) { ignoredKind.push(e); continue }
+        kept.push({ ...e, kind, nameDate: dateInName(e.base),
+                    nameShop: detectShop(e.base, aliases) })
       }
 
-      /* A BILLWISE names its own branch in the BranchName column. That
-         beats guessing from the file name — a file called BILLWISE.xlsx
-         with no shop in its name was landing in an "unknown" group and
-         being skipped entirely, which is why sales went missing while
-         stock went in. */
-      for (const grp of g) {
-        if (grp.shop || !grp.files.bill) continue
+      /* ------------------------------------------------------------
+         A zip can hold several days. Grouping by shop alone treated
+         the second BILLWISE as a duplicate and threw it away, so only
+         one day of a week ever loaded.
+
+         Each BILLWISE names its own branch AND its own date, so every
+         bill file starts a group. The item and salesman files are then
+         matched to it — by shop where the name says, and by date
+         within a day, because the export is usually taken the morning
+         after the trading it describes.
+         ------------------------------------------------------------ */
+
+      const groups = []
+
+      for (const e of kept.filter(x => x.kind === 'bill')) {
+        let shop = e.nameShop, date = null
         try {
-          const rows = sheetOf(grp.files.bill.data, false)
+          const rows = sheetOf(e.data, false)
           const branch = String(rows[0]?.BranchName ?? '').trim()
+          date = billDate(rows[0]?.Date)
           if (branch) {
-            const hit = aliases.find(a =>
-              a.label.toUpperCase() === branch.toUpperCase())
-            grp.shop = hit?.shop_name || branch
-            grp.shopFrom = 'the BILLWISE file itself'
+            const hit = aliases.find(a => a.label.toUpperCase() === branch.toUpperCase())
+            shop = hit?.shop_name || branch
           }
-        } catch { /* leave it for the person to pick */ }
+        } catch { /* the person can pick it */ }
+        groups.push({ shop, date, shopFrom: 'the BILLWISE file itself',
+                      files: { bill: e }, unknown: [], extras: [] })
       }
 
-      /* Two groups can now resolve to the same shop — one found by file
-         name, one by branch column. Merge them. */
-      const byShop = new Map()
-      for (const grp of g) {
-        const key = grp.shop || Math.random()
-        if (!byShop.has(key)) { byShop.set(key, grp); continue }
-        const first = byShop.get(key)
-        for (const [k, v] of Object.entries(grp.files)) {
-          if (first.files[k]) first.extras.push(v)
-          else first.files[k] = v
+      const claim = (kind) => {
+        for (const e of kept.filter(x => x.kind === kind)) {
+          // same shop first, then nearest date within a day
+          const candidates = groups
+            .filter(g => !g.files[kind])
+            .filter(g => !e.nameShop || !g.shop ||
+                         e.nameShop.toLowerCase() === g.shop.toLowerCase())
+            .sort((a, b) => daysApart(e.nameDate, a.date) - daysApart(e.nameDate, b.date))
+
+          const best = candidates[0]
+          if (!best) { (groups[0] || { extras: [] }).extras?.push(e); continue }
+          if (e.nameDate && best.date && daysApart(e.nameDate, best.date) > 1
+              && candidates.length > 1) {
+            best.extras.push(e)
+          } else {
+            best.files[kind] = e
+          }
         }
-        first.unknown.push(...grp.unknown)
       }
-      g = [...byShop.values()].map(x => ({
+      claim('item')
+      claim('salesman')
+
+      /* Stock files stand alone — a snapshot is not tied to a trading
+         day. One per shop; a second for the same shop is the newer of
+         the two, since a snapshot replaces rather than adds. */
+      for (const e of kept.filter(x => x.kind === 'stock')) {
+        const shop = e.nameShop
+        const existing = groups.find(g => g.stockFile && g.shop &&
+                                     shop && g.shop.toLowerCase() === shop.toLowerCase())
+        if (existing) { existing.extras.push(e); continue }
+        const g = groups.find(x => x.shop && shop &&
+                              x.shop.toLowerCase() === shop.toLowerCase() && !x.files.stock)
+        if (g) g.files.stock = e
+        else groups.push({ shop, date: null, files: { stock: e }, unknown: [], extras: [] })
+      }
+
+      for (const e of kept.filter(x => x.kind === null)) {
+        (groups[0] || groups[groups.push({ shop: null, files: {}, unknown: [], extras: [] }) - 1])
+          .unknown.push(e)
+      }
+
+      const g = groups.map(x => ({
         ...x,
+        skipped: ignoredKind.length,
         hasSales: !!(x.files.bill && x.files.item),
         hasStock: !!x.files.stock,
         salesIncomplete: !!x.files.bill !== !!x.files.item
-      }))
+      })).sort((a, b) => (a.shop || '').localeCompare(b.shop || '') ||
+                          String(a.date).localeCompare(String(b.date)))
 
       setGroups(g.map(x => ({ ...x, include: x.hasSales || x.hasStock })))
     } catch (e) {
@@ -154,7 +195,10 @@ export default function BulkUpload() {
     setRunning(true); setError(null)
     const out = []
 
-    for (const g of groups.filter(x => x.include && x.shop)) {
+    const queue = groups.filter(x => x.include && x.shop)
+      .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+
+    for (const g of queue) {
       try {
         if (g.hasStock) {
           setProgress(`${g.shop} — reading the stock file`)
@@ -447,7 +491,12 @@ export default function BulkUpload() {
                   <div className="min-w-0 flex-1">
                     {g.shop ? (
                       <div>
-                        <div className="text-sm font-semibold">{g.shop}</div>
+                        <div className="text-sm font-semibold">
+                          {g.shop}
+                          {g.date && (
+                            <span className="ml-2 font-normal text-slate2">{dt(g.date)}</span>
+                          )}
+                        </div>
                         {g.shopFrom && (
                           <div className="text-2xs text-slate2">read from {g.shopFrom}</div>
                         )}
@@ -520,13 +569,20 @@ export default function BulkUpload() {
             )}
             <button className="btn-dark w-full" disabled={running || ready.length === 0}
               onClick={run}>
-              {running ? 'Uploading…'
-                : ready.length === 0 ? 'Nothing ready to upload'
-                : `Upload ${ready.length} shop${ready.length === 1 ? '' : 's'}`}
+              {(() => {
+                if (running) return 'Uploading…'
+                if (ready.length === 0) return 'Nothing ready to upload'
+                const shops = new Set(ready.map(r => r.shop)).size
+                const days = new Set(ready.filter(r => r.date).map(r => r.date)).size
+                const bits = [`${shops} shop${shops === 1 ? '' : 's'}`]
+                if (days > 1) bits.push(`${days} days`)
+                return `Upload ${bits.join(', ')}`
+              })()}
             </button>
             <p className="mt-2 text-center text-2xs text-slate2">
-              Ten shops takes several minutes. Leave the page open — closing it stops
-              the upload part way through.
+              Each shop-day is loaded separately, oldest first. Ten of them takes
+              several minutes — leave the page open, closing it stops the upload part
+              way through.
             </p>
           </div>
         </>
