@@ -25,6 +25,7 @@ import Godown    from './pages/Godown'
 import Transfers from './pages/Transfers'
 import StockReports from './pages/StockReports'
 import StockUpload  from './pages/StockUpload'
+import BulkUpload   from './pages/BulkUpload'
 import SalesReports   from './pages/SalesReports'
 import SalesUpload    from './pages/SalesUpload'
 import Tasks          from './pages/Tasks'
@@ -107,6 +108,7 @@ const MODULES = [
     pages: [
       { to: '/stock/reports', label: 'Stock reports', short: 'Reports', perm: 'stock.reports' },
       { to: '/stock/upload',  label: 'Upload stock',  short: 'Upload',  perm: 'stock.import' },
+      { to: '/upload',        label: 'Upload a zip',  short: 'Zip',     perm: 'stock.import' },
       { to: '/godown',     label: 'Godown',    short: 'Godown',    perm: 'godown.view' },
       { to: '/transfers',  label: 'Transfers', short: 'Transfers', perm: 'transfers.view' }
     ]
@@ -242,6 +244,7 @@ export default function App() {
           <Route path="/insights"         element={<Need p="insights.view"><Insights /></Need>} />
           <Route path="/stock/reports"    element={<Need p="stock.reports"><StockReports /></Need>} />
           <Route path="/stock/upload"     element={<Need p="stock.import"><StockUpload /></Need>} />
+          <Route path="/upload"           element={<Need p="stock.import"><BulkUpload /></Need>} />
           <Route path="/godown"           element={<Need p="godown.view"><Godown /></Need>} />
           <Route path="/transfers"        element={<Need p="transfers.view"><Transfers /></Need>} />
           {/* Sales opens on the daily reports now. The old dashboard read
