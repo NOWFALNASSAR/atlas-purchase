@@ -373,8 +373,13 @@ function Sidebar({ can, collapsed, onToggle }) {
                 {!collapsed && <span className="truncate">{m.label}</span>}
               </NavLink>
 
-              {!collapsed && on && (
-                <div className="mb-1 ml-[26px] mt-1 space-y-0.5 border-l border-white/10 pl-3">
+              {/* Every module's pages, not only the one you are standing
+                  in. Hiding them until you clicked the module meant a
+                  screen used every morning was invisible until you went
+                  looking for it. The current module is still marked. */}
+              {!collapsed && (
+                <div className={'mb-1 ml-[26px] mt-1 space-y-0.5 border-l pl-3 ' +
+                  (on ? 'border-gold/40' : 'border-white/10')}>
                   {pages.map(p => (
                     <NavLink key={p.to} to={p.to} end={p.end}
                       className={({ isActive }) => 'nav-sub ' + (isActive ? 'nav-sub-on' : '')}>

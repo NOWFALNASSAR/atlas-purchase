@@ -45,6 +45,15 @@ export default function Dashboard() {
     <div className="page page-xl space-y-7">
 
 
+
+      {/* ---------------------------------------------------------------
+          The whole company, before anything else.
+
+          One request, aggregated in the database. This is the screen
+          people open most often, usually on a phone in a shop, and it
+          should not be assembled from a dozen queries in the browser.
+          --------------------------------------------------------------- */}
+      <CompanyOverview can={can} />
       {/* The two things done every morning. They live inside Sales and
           Stock, whose sub-menus only open once you are inside the
           module — so a screen used daily was two clicks deep and
@@ -662,3 +671,189 @@ const firstName = me => (me.full_name || '').trim().split(' ')[0] || ''
 
 const ageDays = iso =>
   Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+
+
+/* ==================================================================
+   COMPANY OVERVIEW
+   ================================================================== */
+
+function CompanyOverview({ can }) {
+  const [o, setO] = useState(null)
+  const [shops, setShops] = useState([])
+  const [groups, setGroups] = useState([])
+  const [state, setState] = useState('loading')
+
+  useEffect(() => {
+    let live = true
+    Promise.all([
+      db.from('v_company_overview').select('*').maybeSingle(),
+      db.from('v_company_by_shop').select('*').order('sales_month', { ascending: false }),
+      db.from('v_company_by_group').select('*')
+    ]).then(([a, b, c]) => {
+      if (!live) return
+      if (a.error) return setState('error')
+      setO(a.data || null)
+      setShops(b.data || [])
+      setGroups(c.data || [])
+      setState('ready')
+    })
+    return () => { live = false }
+  }, [])
+
+  if (state === 'loading') return <div className="card h-40 animate-pulse bg-line2" />
+  if (state === 'error' || !o) return null
+
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold">The company</h2>
+        <span className="text-2xs text-slate2">
+          sales {o.sale_date ? dt(o.sale_date) : 'not loaded'} · stock as last uploaded
+        </span>
+      </div>
+
+      {/* today */}
+      <div className="card grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-6">
+        <Fig label="Sales today" value={lakh(o.sales_today)} feature />
+        <Fig label="Bills" value={Number(o.bills_today || 0).toLocaleString('en-IN')} />
+        <Fig label="Basket" value={inr(o.basket_today)} />
+        <Fig label="Pieces sold" value={num(o.qty_today, 0)} />
+        <Fig label="Margin" value={lakh(o.margin_today)}
+          sub={o.margin_pct_today != null ? num(o.margin_pct_today, 1) + '%' : null} />
+        <Fig label="Shops trading" value={o.shops_trading || 0} />
+      </div>
+
+      {/* month and stock */}
+      <div className="card grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-6">
+        <Fig label="Sales this month" value={lakh(o.sales_month)} />
+        <Fig label="Bills this month" value={Number(o.bills_month || 0).toLocaleString('en-IN')} />
+        <Fig label="Margin this month" value={lakh(o.margin_month)}
+          sub={o.margin_pct_month != null ? num(o.margin_pct_month, 1) + '%' : null} />
+        <Fig label="Stock value" value={lakh(o.stock_value)} />
+        <Fig label="Stock pieces" value={num(o.stock_pieces, 0)} />
+        <Fig label="Stock cover"
+          value={o.stock_cover_days ? Math.round(o.stock_cover_days) + ' days' : '—'}
+          tone={o.stock_cover_days > 180 ? 'bad' : null} />
+      </div>
+
+      {/* CC against Non CC */}
+      {groups.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="border-b border-line px-4 py-2.5 text-sm font-semibold">
+            CC and Non CC
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr>
+                <th className="px-4 py-2 text-left">Group</th>
+                <th className="px-3 py-2 text-right">Stock</th>
+                <th className="px-3 py-2 text-right">Sales, month</th>
+                <th className="px-3 py-2 text-right">Margin</th>
+                <th className="px-4 py-2 text-right">Margin %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.map(g => (
+                <tr key={g.purchase_group} className="border-t border-line">
+                  <td className="px-4 py-2.5 font-medium">{g.purchase_group}</td>
+                  <td className="px-3 py-2.5 text-right">{lakh(g.stock_value)}</td>
+                  <td className="px-3 py-2.5 text-right font-semibold">{lakh(g.sales_month)}</td>
+                  <td className="px-3 py-2.5 text-right">{lakh(g.margin_month)}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    {g.margin_pct == null ? '—' : num(g.margin_pct, 1) + '%'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* shop by shop */}
+      {shops.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+            <span className="text-sm font-semibold">Shop by shop</span>
+            <Link to="/mis" className="text-xs text-slate2">MIS</Link>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr>
+                <th className="px-4 py-2 text-left">Shop</th>
+                <th className="px-3 py-2 text-right">Today</th>
+                <th className="px-3 py-2 text-right">Bills</th>
+                <th className="px-3 py-2 text-right">Basket</th>
+                <th className="px-3 py-2 text-right">Month</th>
+                <th className="px-4 py-2 text-right">Stock</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shops.map(sh => (
+                <tr key={sh.shop} className="border-t border-line">
+                  <td className="px-4 py-2.5 font-medium">{sh.shop}</td>
+                  <td className="px-3 py-2.5 text-right">{lakh(sh.sales_today)}</td>
+                  <td className="px-3 py-2.5 text-right text-slate2">{sh.bills_today || 0}</td>
+                  <td className="px-3 py-2.5 text-right text-slate2">{inr(sh.basket_today)}</td>
+                  <td className="px-3 py-2.5 text-right font-semibold">{lakh(sh.sales_month)}</td>
+                  <td className="px-4 py-2.5 text-right">{lakh(sh.stock_value)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* what is waiting */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {can('po.view') && (
+          <Link to="/orders" className="card p-4 transition hover:border-mute">
+            <div className="text-sm font-semibold">Purchase orders</div>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <Mini label="Waiting approval" value={o.po_pending} warn={o.po_pending > 0} />
+              <Mini label="Open" value={o.po_open} />
+              <Mini label="Part received" value={o.po_partial} />
+            </div>
+            <div className="mt-2 text-2xs text-slate2">
+              {lakh(o.po_open_value)} committed on open orders
+            </div>
+          </Link>
+        )}
+        {can('tasks.view') && (
+          <Link to="/tasks" className="card p-4 transition hover:border-mute">
+            <div className="text-sm font-semibold">Tasks</div>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <Mini label="Open" value={o.tasks_open} />
+              <Mini label="Overdue" value={o.tasks_overdue} bad={o.tasks_overdue > 0} />
+              <Mini label="To check" value={o.tasks_to_check} warn={o.tasks_to_check > 0} />
+            </div>
+            {o.tasks_disputed > 0 && (
+              <div className="mt-2 text-2xs text-bad">
+                {o.tasks_disputed} disputed, waiting on MD Office
+              </div>
+            )}
+          </Link>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function Fig({ label, value, sub, feature, tone }) {
+  return (
+    <div className={'px-4 py-3 ' + (feature ? 'bg-ink text-white' : '')}>
+      <div className={'stat-label ' + (feature ? 'text-white/60' : '')}>{label}</div>
+      <div className={'text-lg font-semibold ' + (tone === 'bad' ? 'text-bad' : '')}>{value}</div>
+      {sub && <div className={'text-2xs ' + (feature ? 'text-white/60' : 'text-slate2')}>{sub}</div>}
+    </div>
+  )
+}
+
+function Mini({ label, value, warn, bad }) {
+  return (
+    <div>
+      <div className="text-2xs text-slate2">{label}</div>
+      <div className={'text-base font-semibold ' +
+        (bad ? 'text-bad' : warn ? 'text-warn' : '')}>{value ?? 0}</div>
+    </div>
+  )
+}
