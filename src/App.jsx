@@ -6,6 +6,7 @@ import { InstallProvider, useInstall, isStandalone } from './components/InstallP
 
 import Login     from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import MisDashboard from './pages/MisDashboard'
 import PurchaseDashboard from './pages/PurchaseDashboard'
 import PurchaseTargets  from './pages/PurchaseTargets'
 import POList    from './pages/POList'
@@ -118,6 +119,7 @@ const MODULES = [
   {
     key: 'sales', label: 'Sales', short: 'Sales',
     pages: [
+      { to: '/mis',             label: 'MIS',             short: 'MIS',      perm: 'sales.reports' },
       { to: '/sales',           label: 'Sales dashboard', short: 'Sales',    perm: 'sales.view' },
       { to: '/sales/reports',   label: 'Daily reports',   short: 'Daily',    perm: 'sales.reports' },
       { to: '/sales/upload',    label: 'Upload BILLWISE + ITEMWISE', short: 'Upload', perm: 'sales.import' },
@@ -238,6 +240,7 @@ export default function App() {
       <Shell me={me} can={can}>
         <Routes>
           <Route path="/"                 element={<Dashboard />} />
+          <Route path="/mis"              element={<Need p="sales.reports"><MisDashboard /></Need>} />
           <Route path="/purchase"         element={<Need p="po.view"><PurchaseDashboard /></Need>} />
           <Route path="/orders"           element={<Need p="po.view"><POList /></Need>} />
           <Route path="/orders/new"       element={<Need p="po.create"><NewPO /></Need>} />
