@@ -1,12 +1,25 @@
 import { useEffect, useState } from 'react'
-import { db, inr, margin, dt } from '../lib/db'
+import { db, inr, margin, dt, num } from '../lib/db'
 import Picker from './Picker'
 import QuickAddItem from './QuickAddItem'
 import PhotoStrip from './PhotoStrip'
 import ShopSplit from './ShopSplit'
 
 /** One line of a purchase order. Quantity comes from the shop split. */
-export default function ItemEditor({ line, index, items, shops, onSaved, onDeleted, editable, po }) {
+export default function ItemEditor({ line, index, items, supplierItems = [], shops,
+                                    onSaved, onDeleted, editable, po }) {
+  /* Ordering from 11,000 items when a supplier sells you forty of them
+     is how the wrong item gets picked. So the list is what THIS
+     supplier has supplied before, with the last rate and date on each
+     row. Everything else is still reachable, one tap away, because a
+     first order from a supplier has no history at all. */
+  const [allItems, setAllItems] = useState(false)
+  /* An empty supplierItems list has two very different causes: a first
+     order from this supplier, or v_supplier_items not existing. The
+     picker looks identical either way — every item, unfiltered — so it
+     is worth saying which. */
+  const [whyAll, setWhyAll] = useState(null)
+  const known = new Map(supplierItems.map(r => [String(r.item_name).toLowerCase(), r]))
   const [f, setF] = useState(line)
   const [open, setOpen] = useState(!line.item_name)
   const [history, setHistory] = useState([])
@@ -142,12 +155,90 @@ export default function ItemEditor({ line, index, items, shops, onSaved, onDelet
 
       <div className="space-y-3">
         <div>
-          <Picker label="Item" placeholder="Search item master"
-            options={[...extraItems, ...items].map(i => ({
-              id: i.id, label: i.name,
-              sub: `${i.code}${i.model_no ? ' · ' + i.model_no : ''}`
-            }))}
+          <Picker
+            label="Item"
+            placeholder={allItems || supplierItems.length === 0
+              ? 'Search the whole item master'
+              : `Search the ${supplierItems.length} items this supplier supplies`}
+            options={(() => {
+              const base = [...extraItems, ...items]
+              const list = (allItems || supplierItems.length === 0)
+                ? base
+                : base.filter(i => known.has(String(i.name).toLowerCase()))
+              return list.map(i => {
+                const h = known.get(String(i.name).toLowerCase())
+                return {
+                  id: i.id,
+                  label: i.name,
+                  sub: h && h.last_rate
+                    ? `last ${inr(h.last_rate)}${h.last_date && h.last_date > '1900-01-01'
+                        ? ' on ' + dt(h.last_date) : ''}`
+                    : `${i.code}${i.model_no ? ' · ' + i.model_no : ''}`
+                }
+              })
+            })()}
             value={f.item_id} onChange={pickItem} />
+
+          {supplierItems.length === 0 && whyAll && (
+            <p className={'mt-1.5 text-2xs ' + (whyAll === 'missing' ? 'text-bad' : 'text-slate2')}>
+              {whyAll === 'missing'
+                ? 'Showing every item because the supplier history is not set up yet — run 75_supplier_items.sql, then this list narrows to what this supplier actually sells you.'
+                : 'Showing every item because nothing has been bought from this supplier before. Once an order goes through, this narrows to what they supply.'}
+            </p>
+          )}
+
+          {supplierItems.length > 0 && (
+            <button type="button" onClick={() => setAllItems(v => !v)}
+              className="mt-1.5 text-xs font-medium text-slate2">
+              {allItems
+                ? `Show only what this supplier supplies (${supplierItems.length})`
+                : 'Show the whole item master instead'}
+            </button>
+          )}
+
+          {/* §14, §15, §17 — what this item cost last time, and what
+              the rate being typed does against it. A buyer at a
+              counter needs this before agreeing, not in a report
+              afterwards. */}
+          {(() => {
+            const h = known.get(String(
+              [...extraItems, ...items].find(i => i.id === f.item_id)?.name || ''
+            ).toLowerCase())
+            if (!h) return null
+            const now = Number(f.purchase_rate || 0)
+            const diff = h.last_rate > 0 && now > 0
+              ? (now - h.last_rate) / h.last_rate * 100 : null
+            return (
+              <div className="mt-2 rounded-md bg-paper p-3">
+                <div className="text-2xs font-semibold text-slate2">
+                  Bought from this supplier before
+                </div>
+                <div className="mt-1.5 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+                  <Pair label="Last rate" value={h.last_rate ? inr(h.last_rate) : '—'}
+                    sub={h.last_date && h.last_date > '1900-01-01' ? dt(h.last_date) : null} />
+                  <Pair label="Lowest"
+                    value={inr(h.lowest_arrived ?? h.lowest_ordered) || '—'} />
+                  <Pair label="Highest"
+                    value={inr(h.highest_arrived ?? h.highest_ordered) || '—'} />
+                  <Pair label="Average"
+                    value={inr(h.avg_arrived ?? h.avg_ordered) || '—'} />
+                </div>
+                {diff != null && Math.abs(diff) >= 1 && (
+                  <div className={'mt-2 text-xs font-medium ' +
+                    (diff > 0 ? 'text-bad' : 'text-good')}>
+                    {diff > 0
+                      ? `Rate is ${num(diff, 1)}% higher than last time`
+                      : `Rate is ${num(Math.abs(diff), 1)}% lower than last time`}
+                  </div>
+                )}
+                <div className="mt-1 text-2xs text-slate2">
+                  {h.times_ordered > 0 && `${h.times_ordered} order${h.times_ordered > 1 ? 's' : ''}`}
+                  {h.times_ordered > 0 && h.batches_arrived > 0 && ' · '}
+                  {h.batches_arrived > 0 && `${h.batches_arrived} arrival${h.batches_arrived > 1 ? 's' : ''} in stock`}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* §36 — adding an item must not mean abandoning the order.
               A full-width button, because at a supplier's counter this
@@ -260,6 +351,17 @@ function Mini({ label, value, warn }) {
     <div className="px-2 py-2 text-center">
       <div className="text-[10px] uppercase tracking-wider text-white/60">{label}</div>
       <div className={'text-sm font-bold ' + (warn ? 'text-gold' : '')}>{value}</div>
+    </div>
+  )
+}
+
+
+function Pair({ label, value, sub }) {
+  return (
+    <div>
+      <div className="text-2xs text-slate2">{label}</div>
+      <div className="font-semibold">{value}</div>
+      {sub && <div className="text-2xs text-slate2">{sub}</div>}
     </div>
   )
 }

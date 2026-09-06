@@ -34,6 +34,7 @@ export default function StockReports() {
   const [tab, setTab] = useState('overview')
   const [shop, setShop] = useState('all')
   const [shops, setShops] = useState([])
+  const [missing, setMissing] = useState([])
   const [data, setData] = useState({})
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(null)
@@ -81,7 +82,12 @@ export default function StockReports() {
              The upload writes barcodes and stock lines and never
              touches items, so anything that arrived through the app
              was missing from this tab entirely. */
-          db.from('v_items_seen').select('*').order('name').limit(2000),
+          /* Newest arrival first. An item master sorted by name is a
+             dictionary; sorted by arrival it shows what has just come
+             in, which is what someone opening this actually wants. */
+          db.from('v_items_seen').select('*')
+            .order('last_arrival', { ascending: false, nullsFirst: false })
+            .limit(2000),
           db.from('suppliers').select('*').eq('active', true).order('name').limit(500),
           db.from('v_stock_by_shop').select('*').order('value', { ascending: false }),
           shop === 'all'
@@ -91,6 +97,15 @@ export default function StockReports() {
         ])
 
       if (snap.error) throw snap.error
+
+      /* A view that does not exist comes back as an error, and an
+         empty table looks exactly like "no data" — which cost an
+         afternoon on the dashboard. Say which view is missing. */
+      const gone = [
+        ['v_items_seen', items], ['v_stock_by_shop', byShop],
+        ['v_stock_group_all', byGroup], ['v_stock_ageing', ageing]
+      ].filter(([, r]) => r?.error).map(([n]) => n)
+      setMissing(gone)
 
       setData({
         snapshot: (snap.data || [])[0],
@@ -150,6 +165,13 @@ export default function StockReports() {
 
   return (
     <div className="page page-xl space-y-4">
+      {missing.length > 0 && (
+        <div className="card border-gold/40 bg-gold2 p-3 text-xs text-gold">
+          These are not in the database yet: {missing.join(', ')}. Run the migration
+          that creates them — 77_items_from_stock.sql for the item master.
+        </div>
+      )}
+
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight lg:text-2xl">Stock reports</h1>
