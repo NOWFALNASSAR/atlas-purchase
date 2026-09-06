@@ -44,6 +44,39 @@ export default function Dashboard() {
   return (
     <div className="page page-xl space-y-7">
 
+
+      {/* The two things done every morning. They live inside Sales and
+          Stock, whose sub-menus only open once you are inside the
+          module — so a screen used daily was two clicks deep and
+          invisible until you went looking for it. */}
+      {(can('sales.import') || can('stock.import')) && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {can('stock.import') && (
+            <Link to="/stock/upload"
+              className="card flex items-center gap-3 p-4 transition hover:border-mute">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-ink text-white">↑</span>
+              <span>
+                <span className="block text-sm font-semibold">Upload stock</span>
+                <span className="block text-2xs text-slate2">
+                  A shop or godown stock analysis file
+                </span>
+              </span>
+            </Link>
+          )}
+          {can('sales.import') && (
+            <Link to="/sales/upload"
+              className="card flex items-center gap-3 p-4 transition hover:border-mute">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-gold text-white">↑</span>
+              <span>
+                <span className="block text-sm font-semibold">Upload sales</span>
+                <span className="block text-2xs text-slate2">
+                  BILLWISE, ITEMWISE and SALESMANWISE
+                </span>
+              </span>
+            </Link>
+          )}
+        </div>
+      )}
       <header className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
