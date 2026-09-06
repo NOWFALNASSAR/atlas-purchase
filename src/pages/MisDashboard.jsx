@@ -64,11 +64,11 @@ export default function MisDashboard() {
   const keyOf = {
     group: r => r.purchase_group,
     type: r => r.purchase_type || 'Unclassified',
-    /* Both sides must key on the same thing or one shop becomes two
-       rows — stock carries shop_key, sales carry branch_code, and both
-       are the uppercase code. r.shop is the pretty name and is only
-       for display. */
-    shop: r => (r.shop_key || r.branch_code || 'Not set').toUpperCase(),
+    /* Key on the RESOLVED name, which both sides now carry. Keying on
+       shop_key for stock and branch_code for sales meant S06 and
+       NILAMBUR were different strings for one shop, so it appeared
+       twice — stock under a code, sales under a name. */
+    shop: r => r.shop || r.shop_key || r.branch_code || 'Not set',
     division: r => r.division || 'Unclassified'
   }
 
