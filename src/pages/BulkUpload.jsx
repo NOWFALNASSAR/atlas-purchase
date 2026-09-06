@@ -50,7 +50,47 @@ export default function BulkUpload() {
     try {
       const entries = await readZip(file)
       if (!entries.length) throw new Error('The zip has no files in it')
-      const g = groupFiles(entries, aliases)
+      let g = groupFiles(entries, aliases)
+
+      /* A BILLWISE names its own branch in the BranchName column. That
+         beats guessing from the file name — a file called BILLWISE.xlsx
+         with no shop in its name was landing in an "unknown" group and
+         being skipped entirely, which is why sales went missing while
+         stock went in. */
+      for (const grp of g) {
+        if (grp.shop || !grp.files.bill) continue
+        try {
+          const rows = sheetOf(grp.files.bill.data, false)
+          const branch = String(rows[0]?.BranchName ?? '').trim()
+          if (branch) {
+            const hit = aliases.find(a =>
+              a.label.toUpperCase() === branch.toUpperCase())
+            grp.shop = hit?.shop_name || branch
+            grp.shopFrom = 'the BILLWISE file itself'
+          }
+        } catch { /* leave it for the person to pick */ }
+      }
+
+      /* Two groups can now resolve to the same shop — one found by file
+         name, one by branch column. Merge them. */
+      const byShop = new Map()
+      for (const grp of g) {
+        const key = grp.shop || Math.random()
+        if (!byShop.has(key)) { byShop.set(key, grp); continue }
+        const first = byShop.get(key)
+        for (const [k, v] of Object.entries(grp.files)) {
+          if (first.files[k]) first.extras.push(v)
+          else first.files[k] = v
+        }
+        first.unknown.push(...grp.unknown)
+      }
+      g = [...byShop.values()].map(x => ({
+        ...x,
+        hasSales: !!(x.files.bill && x.files.item),
+        hasStock: !!x.files.stock,
+        salesIncomplete: !!x.files.bill !== !!x.files.item
+      }))
+
       setGroups(g.map(x => ({ ...x, include: x.hasSales || x.hasStock })))
     } catch (e) {
       setError(e.message)
@@ -375,7 +415,12 @@ export default function BulkUpload() {
                     className="mt-1 h-4 w-4" />
                   <div className="min-w-0 flex-1">
                     {g.shop ? (
-                      <div className="text-sm font-semibold">{g.shop}</div>
+                      <div>
+                        <div className="text-sm font-semibold">{g.shop}</div>
+                        {g.shopFrom && (
+                          <div className="text-2xs text-slate2">read from {g.shopFrom}</div>
+                        )}
+                      </div>
                     ) : (
                       <div>
                         <div className="text-sm font-semibold text-gold">

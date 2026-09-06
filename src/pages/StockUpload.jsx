@@ -63,11 +63,14 @@ const GODOWN = 'godown'
      per shop per day, and loading it twice is how a figure doubles. */
   useEffect(() => {
     if (!shop) { setLocked(null); return }
-    const code = shopCode(shop)
+    /* Match on shop_id, which is what the unique index uses — not on
+       shop_code. A godown file loaded through the SQL parts has a null
+       shop_code, while this page sends 'GODOWN'. Checking the code
+       missed that row, the delete below missed it too, and the insert
+       then collided with a snapshot that was still sitting there. */
     const today = new Date().toISOString().slice(0, 10)
-    db.from('stock_snapshots').select('*')
-      .eq('taken_on', today)
-      .eq('shop_code', code)
+    const q = db.from('stock_snapshots').select('*').eq('taken_on', today)
+    ;(shop === GODOWN ? q.is('shop_id', null) : q.eq('shop_id', shop))
       .maybeSingle()
       .then(({ data }) => setLocked(data || null))
   }, [shop, shops])
@@ -188,8 +191,10 @@ const GODOWN = 'godown'
 
     try {
       setProgress('Clearing the previous file for this shop…')
-      await db.from('stock_snapshots').delete()
-        .eq('taken_on', new Date().toISOString().slice(0, 10)).eq('shop_code', code)
+      const today = new Date().toISOString().slice(0, 10)
+      const del = db.from('stock_snapshots').delete().eq('taken_on', today)
+      const { error: delErr } = await (isGodown ? del.is('shop_id', null) : del.eq('shop_id', shop))
+      if (delErr) throw delErr
 
       setProgress('Making room for new divisions and purchase types…')
       if (p.divisions.length) {
@@ -249,7 +254,14 @@ const GODOWN = 'godown'
         note: note.trim() || null,
         locked: true
       }).select().single()
-      if (snapErr) throw snapErr
+      if (snapErr) {
+        throw new Error(
+          /duplicate|unique/i.test(snapErr.message)
+            ? 'There is already a stock upload for this shop today that could not be ' +
+              'cleared automatically — usually one loaded through the SQL parts rather ' +
+              'than this page. Clear it in the list below, then upload again.'
+            : snapErr.message)
+      }
 
       // only rows WITH stock become stock figures
       n = 0
@@ -511,7 +523,7 @@ const GODOWN = 'godown'
                   (r.counts_as_stock ? 'bg-good' : 'bg-line2')} />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium">
-                    {r.shop} · {dt(r.taken_on)}
+                    {r.shop_display || r.shop} · {dt(r.taken_on)}
                   </span>
                   <span className="block truncate text-2xs text-slate2">
                     {Number(r.rows_loaded).toLocaleString('en-IN')} rows ·{' '}
@@ -566,7 +578,8 @@ const GODOWN = 'godown'
                 onClick={async () => {
                   setBusy(true)
                   const { error } = await db.rpc('clear_stock_day', {
-                    p_shop_code: clearing.shop === '(godown / company-wide)' ? 'GODOWN' : clearing.shop,
+                    p_shop_code: /godown|company-wide|not set/i.test(clearing.shop)
+                      ? 'GODOWN' : clearing.shop,
                     p_date: clearing.taken_on, p_reason: clearWhy.trim()
                   })
                   setBusy(false)
