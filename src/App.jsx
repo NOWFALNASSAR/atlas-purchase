@@ -108,7 +108,7 @@ const MODULES = [
     pages: [
       { to: '/stock/reports', label: 'Stock reports', short: 'Reports', perm: 'stock.reports' },
       { to: '/stock/upload',  label: 'Upload stock',  short: 'Upload',  perm: 'stock.import' },
-      { to: '/upload',        label: 'Upload a zip',  short: 'Zip',     perm: 'stock.import' },
+      { to: '/upload?only=stock', label: 'Upload a zip', short: 'Zip',   perm: 'stock.import' },
       { to: '/godown',     label: 'Godown',    short: 'Godown',    perm: 'godown.view' },
       { to: '/transfers',  label: 'Transfers', short: 'Transfers', perm: 'transfers.view' }
     ]
@@ -119,6 +119,7 @@ const MODULES = [
       { to: '/mis',             label: 'MIS',             short: 'MIS',      perm: 'sales.reports' },
       { to: '/sales/reports',   label: 'Daily reports',   short: 'Daily',    perm: 'sales.reports' },
       { to: '/sales/upload',    label: 'Upload BILLWISE + ITEMWISE', short: 'Upload', perm: 'sales.import' },
+      { to: '/upload?only=sales', label: 'Upload a zip of sales', short: 'Zip', perm: 'sales.import' },
     ]
   },
   {
@@ -147,8 +148,13 @@ const MODULES = [
   }
 ]
 
-const moduleFor = (path) => {
+const moduleFor = (path, search = '') => {
   if (path === '/') return 'home'
+  /* /upload serves both modules and is told apart by its query string,
+     so the sidebar highlights the one you came in from. */
+  if (path.startsWith('/upload')) {
+    return (search || '').includes('only=sales') ? 'sales' : 'stock'
+  }
   if (path.startsWith('/tasks')) return 'tasks'
   if (path.startsWith('/purchase')) return 'purchase'
   if (path.startsWith('/sales')) return 'sales'
@@ -161,9 +167,9 @@ const allowed = (page, can) => !page.perm || can(page.perm)
 const moduleAllowed = (mod, can) => mod.pages.some(p => allowed(p, can))
 const visiblePages = (mod, can) => (mod?.pages || []).filter(p => allowed(p, can))
 
-function titleFor(pathname) {
+function titleFor(pathname, search = '') {
   if (pathname === '/') return 'Dashboard'
-  const mod = MODULES.find(m => m.key === moduleFor(pathname))
+  const mod = MODULES.find(m => m.key === moduleFor(pathname, search))
   const exact = mod?.pages.find(p => p.to === pathname)
   if (exact) return exact.label
   if (pathname.startsWith('/orders/')) return 'Purchase order'
@@ -289,7 +295,7 @@ export default function App() {
 /* ------------------------------------------------------------------ */
 
 function Shell({ me, can, children }) {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const [collapsed, setCollapsed] = useState(() => {
     const s = localStorage.getItem('navCollapsed')
     if (s !== null) return s === '1'
@@ -327,8 +333,8 @@ function Shell({ me, can, children }) {
 /* ---------- left sidebar (tablet and up) --------------------------- */
 
 function Sidebar({ can, collapsed, onToggle }) {
-  const { pathname } = useLocation()
-  const current = moduleFor(pathname)
+  const { pathname, search } = useLocation()
+  const current = moduleFor(pathname, search)
   const mods = MODULES.filter(m => moduleAllowed(m, can))
 
   return (
@@ -407,9 +413,9 @@ function Sidebar({ can, collapsed, onToggle }) {
 /* ---------- phone drawer ------------------------------------------- */
 
 function Drawer({ me, can, onClose }) {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const nav = useNavigate()
-  const current = moduleFor(pathname)
+  const current = moduleFor(pathname, search)
 
   return (
     <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
@@ -466,9 +472,9 @@ function Drawer({ me, can, onClose }) {
 
 function Header({ me, onMenu }) {
   const nav = useNavigate()
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const [open, setOpen] = useState(false)
-  const title = titleFor(pathname)
+  const title = titleFor(pathname, search)
   const moduleLabel = MODULES.find(m => m.key === moduleFor(pathname))?.label || 'Atlas'
 
   useEffect(() => {
@@ -549,8 +555,8 @@ function Header({ me, onMenu }) {
 /* ---------- phone bottom bar ---------------------------------------- */
 
 function BottomNav({ can }) {
-  const { pathname } = useLocation()
-  const current = moduleFor(pathname)
+  const { pathname, search } = useLocation()
+  const current = moduleFor(pathname, search)
   const mods = MODULES.filter(m => moduleAllowed(m, can))
 
   /* On the dashboard the bar jumps between modules. Inside a module it

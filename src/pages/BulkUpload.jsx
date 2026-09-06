@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { db, inr, lakh, dt, num } from '../lib/db'
 import { readZip, detectKind, detectShop, groupFiles, KIND_LABEL } from '../lib/zip'
@@ -21,6 +21,13 @@ import { readZip, detectKind, detectShop, groupFiles, KIND_LABEL } from '../lib/
 const BATCH = 200
 
 export default function BulkUpload() {
+  /* The same page serves Sales and Stock. ?only=sales ignores stock
+     files in the zip and the other way round — so a zip holding
+     everything can still be used from either menu without loading the
+     half you did not come for. */
+  const [params] = useSearchParams()
+  const only = params.get('only')             // 'sales' | 'stock' | null
+
   const [aliases, setAliases] = useState([])
   const [shops, setShops] = useState([])
   const [groups, setGroups] = useState(null)
@@ -51,6 +58,17 @@ export default function BulkUpload() {
       const entries = await readZip(file)
       if (!entries.length) throw new Error('The zip has no files in it')
       let g = groupFiles(entries, aliases)
+
+      // drop the kinds this page is not here for
+      if (only) {
+        const wanted = only === 'sales' ? ['bill', 'item', 'salesman'] : ['stock']
+        for (const grp of g) {
+          for (const k of Object.keys(grp.files)) {
+            if (!wanted.includes(k)) { grp.skipped = (grp.skipped || 0) + 1; delete grp.files[k] }
+          }
+        }
+        g = g.filter(x => Object.keys(x.files).length > 0)
+      }
 
       /* A BILLWISE names its own branch in the BranchName column. That
          beats guessing from the file name — a file called BILLWISE.xlsx
@@ -376,10 +394,18 @@ export default function BulkUpload() {
   return (
     <div className="page page-lg space-y-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight lg:text-2xl">Upload everything at once</h1>
+        <h1 className="text-xl font-semibold tracking-tight lg:text-2xl">
+          {only === 'sales' ? 'Upload a zip of sales'
+            : only === 'stock' ? 'Upload a zip of stock files'
+            : 'Upload everything at once'}
+        </h1>
         <p className="text-sm text-slate2">
-          One zip holding every shop's files. It shows what it found before writing
-          anything.
+          {only === 'sales'
+            ? "One zip holding BILLWISE, ITEMWISE and SALESMANWISE for every shop. Stock files in the same zip are ignored here."
+            : only === 'stock'
+              ? "One zip holding every shop's stock analysis file. Sales files in the same zip are ignored here."
+              : "One zip holding every shop's files, stock and sales together."}
+          {' '}It shows what it found before writing anything.
         </p>
       </div>
 
@@ -389,9 +415,14 @@ export default function BulkUpload() {
           <input ref={input} type="file" accept=".zip" className="text-sm"
             onChange={e => pick(e.target.files?.[0])} />
           <p className="mt-2 text-2xs text-slate2">
-            Stock analysis files, and BILLWISE with ITEMWISE and SALESMANWISE. The shop
-            is taken from each file's name. A file the app cannot place is listed rather
-            than guessed at.
+            {only === 'sales'
+              ? 'BILLWISE and ITEMWISE are both needed — they are checked against each other. SALESMANWISE is optional.'
+              : only === 'stock'
+                ? 'One stock analysis file per shop.'
+                : 'Stock analysis files, and BILLWISE with ITEMWISE and SALESMANWISE.'}
+            {' '}The shop is read from the file name, or from inside BILLWISE where the
+            name does not say. A file that cannot be placed is listed rather than
+            guessed at.
           </p>
           {reading && <div className="mt-3 text-sm text-slate2">Reading the zip…</div>}
         </section>
@@ -455,6 +486,13 @@ export default function BulkUpload() {
                         </li>
                       ))}
                     </ul>
+
+                    {g.skipped > 0 && (
+                      <p className="mt-1 text-2xs text-slate2">
+                        {g.skipped} file{g.skipped > 1 ? 's' : ''} of the other kind in
+                        this zip, ignored on this page.
+                      </p>
+                    )}
 
                     {g.salesIncomplete && (
                       <p className="mt-1.5 text-2xs text-bad">
