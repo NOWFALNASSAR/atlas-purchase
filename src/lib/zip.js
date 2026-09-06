@@ -42,7 +42,8 @@ export async function readZip(file) {
     const base = name.split('/').pop()
     if (!base || name.endsWith('/') || base.startsWith('.') || name.startsWith('__MACOSX')) continue
 
-    out.push({ name, base, method, csize, usize, local })
+    const dir = name.includes('/') ? name.slice(0, name.lastIndexOf('/')) : ''
+    out.push({ name, base, dir, method, csize, usize, local })
   }
 
   /* Each entry's data starts after its own local header, whose extra

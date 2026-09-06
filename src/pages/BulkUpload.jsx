@@ -67,8 +67,19 @@ export default function BulkUpload() {
         const kind = detectKind(e.base)
         if (!kind) { kept.push({ ...e, kind: null }); continue }
         if (!wanted.includes(kind)) { ignoredKind.push(e); continue }
-        kept.push({ ...e, kind, nameDate: dateInName(e.base),
-                    nameShop: detectShop(e.base, aliases) })
+        /* The folder counts as much as the file name. Ten shops each
+           exporting BILLWISE.xlsx can only sit in one zip inside
+           folders — NILAMBUR/BILLWISE.xlsx — and matching on the base
+           name alone made all ten look identical.
+
+           The folder is also what keeps a shop's ITEMWISE with its own
+           BILLWISE. Matching those on date alone would happily pair
+           one shop's items with another shop's bills, which is the
+           kind of wrong that looks perfectly fine on screen. */
+        const dir = e.name.includes('/') ? e.name.slice(0, e.name.lastIndexOf('/')) : ''
+        kept.push({ ...e, kind, dir,
+                    nameDate: dateInName(e.base) || dateInName(dir),
+                    nameShop: detectShop(e.base, aliases) || detectShop(dir, aliases) })
       }
 
       /* ------------------------------------------------------------
@@ -86,27 +97,43 @@ export default function BulkUpload() {
       const groups = []
 
       for (const e of kept.filter(x => x.kind === 'bill')) {
-        let shop = e.nameShop, date = null
+        let shop = e.nameShop, date = null, clash = null
         try {
           const rows = sheetOf(e.data, false)
           const branch = String(rows[0]?.BranchName ?? '').trim()
           date = billDate(rows[0]?.Date)
           if (branch) {
             const hit = aliases.find(a => a.label.toUpperCase() === branch.toUpperCase())
-            shop = hit?.shop_name || branch
+            const fromFile = hit?.shop_name || branch
+
+            /* The file's own branch wins — it is what was billed. But
+               if the folder says something else, that is worth saying:
+               a file copied into the wrong folder is otherwise
+               invisible, and the figures would land under a shop that
+               did not earn them. */
+            if (shop && shop.toLowerCase() !== fromFile.toLowerCase()) {
+              clash = { folder: shop, file: fromFile }
+            }
+            shop = fromFile
           }
         } catch { /* the person can pick it */ }
-        groups.push({ shop, date, shopFrom: 'the BILLWISE file itself',
+        groups.push({ shop, date, dir: e.dir, clash,
+                      shopFrom: e.dir ? `the ${e.dir} folder` : 'the BILLWISE file itself',
                       files: { bill: e }, unknown: [], extras: [] })
       }
 
       const claim = (kind) => {
         for (const e of kept.filter(x => x.kind === kind)) {
-          // same shop first, then nearest date within a day
-          const candidates = groups
-            .filter(g => !g.files[kind])
-            .filter(g => !e.nameShop || !g.shop ||
-                         e.nameShop.toLowerCase() === g.shop.toLowerCase())
+          let candidates = groups.filter(g => !g.files[kind])
+
+          /* Same folder wins outright. Only when there are no folders
+             does this fall back to shop name and then to date. */
+          const sameDir = candidates.filter(g => e.dir && g.dir === e.dir)
+          if (sameDir.length) candidates = sameDir
+          else candidates = candidates.filter(g => !e.nameShop || !g.shop ||
+                              e.nameShop.toLowerCase() === g.shop.toLowerCase())
+
+          candidates = candidates
             .sort((a, b) => daysApart(e.nameDate, a.date) - daysApart(e.nameDate, b.date))
 
           const best = candidates[0]
@@ -536,6 +563,14 @@ export default function BulkUpload() {
                       ))}
                     </ul>
 
+                    {g.clash && (
+                      <p className="mt-1.5 text-2xs text-bad">
+                        The folder is named {g.clash.folder} but the file inside says
+                        {' '}{g.clash.file}. Loading it as {g.clash.file}, which is what
+                        was billed — check the file is in the right folder.
+                      </p>
+                    )}
+
                     {g.skipped > 0 && (
                       <p className="mt-1 text-2xs text-slate2">
                         {g.skipped} file{g.skipped > 1 ? 's' : ''} of the other kind in
@@ -576,7 +611,8 @@ export default function BulkUpload() {
                 const days = new Set(ready.filter(r => r.date).map(r => r.date)).size
                 const bits = [`${shops} shop${shops === 1 ? '' : 's'}`]
                 if (days > 1) bits.push(`${days} days`)
-                return `Upload ${bits.join(', ')}`
+                const label = `Upload ${bits.join(', ')}`
+                return ready.length > shops ? `${label} — ${ready.length} in all` : label
               })()}
             </button>
             <p className="mt-2 text-center text-2xs text-slate2">
