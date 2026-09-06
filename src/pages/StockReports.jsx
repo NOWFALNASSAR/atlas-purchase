@@ -101,11 +101,14 @@ export default function StockReports() {
       /* A view that does not exist comes back as an error, and an
          empty table looks exactly like "no data" — which cost an
          afternoon on the dashboard. Say which view is missing. */
-      const gone = [
+      /* Report what the database actually said. Calling every failure
+         "not in the database" was a guess, and a wrong one sends you
+         to run a migration that has already run. */
+      setMissing([
         ['v_items_seen', items], ['v_stock_by_shop', byShop],
         ['v_stock_group_all', byGroup], ['v_stock_ageing', ageing]
-      ].filter(([, r]) => r?.error).map(([n]) => n)
-      setMissing(gone)
+      ].filter(([, r]) => r?.error)
+       .map(([n, r]) => ({ view: n, message: r.error.message, code: r.error.code })))
 
       setData({
         snapshot: (snap.data || [])[0],
@@ -167,8 +170,20 @@ export default function StockReports() {
     <div className="page page-xl space-y-4">
       {missing.length > 0 && (
         <div className="card border-gold/40 bg-gold2 p-3 text-xs text-gold">
-          These are not in the database yet: {missing.join(', ')}. Run the migration
-          that creates them — 77_items_from_stock.sql for the item master.
+          <div className="font-semibold">Some data could not be read</div>
+          <ul className="mt-1 space-y-0.5">
+            {missing.map(m => (
+              <li key={m.view}>
+                <span className="font-medium">{m.view}</span> — {m.message}
+                {m.code && <span className="text-gold/70"> ({m.code})</span>}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-gold/80">
+            {missing.some(m => /does not exist|schema cache/i.test(m.message))
+              ? 'If it says schema cache, the view exists and Supabase has not noticed yet — wait a minute and reload. If it says does not exist, run 79_masters_STEP3.sql.'
+              : 'Send me this line and I will tell you which it is.'}
+          </p>
         </div>
       )}
 
