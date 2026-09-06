@@ -506,27 +506,37 @@ function CompanyOverview({ can }) {
 
   useEffect(() => {
     let live = true
-    Promise.all([
-      db.from('v_company_overview').select('*').maybeSingle(),
-      db.from('v_company_by_shop').select('*').order('sales_month', { ascending: false }),
-      db.from('v_company_by_group').select('*'),
-      /* Stock comes from ONE place. The headline used to read it from
-         v_company_overview while the table below read it from
-         v_company_by_shop — two views computing the same figure, and
-         one showed zero while the other showed crores. */
-      db.from('v_stock_summary').select('*').maybeSingle()
-    ]).then(([a, b, c, d]) => {
+
+    /* Four separate loads, not one Promise.all.
+
+       They were fetched together and a single failure set the whole
+       panel to "error" — so one missing view took out sales, stock, the
+       shop table and the group split at once, leaving only the older
+       sections below and no stock anywhere. A dashboard should degrade
+       one figure at a time, not all at once. */
+
+    const get = (view, single) => {
+      const q = db.from(view).select('*')
+      return (single ? q.maybeSingle() : q)
+    }
+
+    get('v_company_overview', true).then(({ data, error }) => {
       if (!live) return
-      if (a.error || b.error || c.error) {
-        setErr((a.error || b.error || c.error).message)
-        return setState('error')
-      }
-      setO(a.data || null)
-      setShops(b.data || [])
-      setGroups(c.data || [])
-      setStock(d.data || null)
-      setState(a.data ? 'ready' : 'empty')
+      if (error) setErr(e => e || error.message)
+      setO(data || null)
+      setState('ready')
     })
+
+    get('v_company_by_shop').then(({ data, error }) => {
+      if (!live) return
+      if (error) setErr(e => e || error.message)
+      setShops(data || [])
+    })
+
+    get('v_company_by_group').then(({ data }) => { if (live) setGroups(data || []) })
+
+    get('v_stock_summary', true).then(({ data }) => { if (live) setStock(data || null) })
+
     return () => { live = false }
   }, [])
 
@@ -535,18 +545,7 @@ function CompanyOverview({ can }) {
   /* Say what is wrong rather than disappearing. This section used to
      return null on any error, so a missing view looked exactly like an
      old build — and cost an afternoon of looking in the wrong place. */
-  if (state === 'error') return (
-    <div className="card border-bad/30 bg-bad/[.04] p-4 text-sm text-bad">
-      <div className="font-semibold">The company figures could not be loaded</div>
-      <div className="mt-0.5 break-words">{err}</div>
-      <p className="mt-2 text-xs">
-        If this names a view starting v_company, run these in Supabase, in order:
-        {' '}59_company_overview.sql, 65_shop_map.sql, 66_mis_shop_name.sql.
-      </p>
-    </div>
-  )
-
-  if (state === 'empty' || !o) return (
+  if (!o && shops.length === 0) return (
     <div className="card p-5 text-sm text-slate2">
       <div className="font-semibold text-ink">No figures yet</div>
       <p className="mt-0.5">
@@ -558,38 +557,49 @@ function CompanyOverview({ can }) {
 
   return (
     <section className="space-y-3">
+      {err && (
+        <div className="card border-gold/40 bg-gold2 p-3 text-xs text-gold">
+          Some figures could not be loaded: {err}. The rest are shown below.
+        </div>
+      )}
+
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold">The company</h2>
         <span className="text-2xs text-slate2">
-          sales {o.sale_date ? dt(o.sale_date) : 'not loaded'} · stock as last uploaded
+          sales {o?.sale_date ? dt(o.sale_date) : 'not loaded'} · stock as last uploaded
         </span>
       </div>
 
       {/* today */}
       <div className="card grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-6">
-        <Fig label="Sales today" value={lakh(o.sales_today)} feature />
-        <Fig label="Bills" value={Number(o.bills_today || 0).toLocaleString('en-IN')} />
-        <Fig label="Basket" value={inr(o.basket_today)} />
-        <Fig label="Pieces sold" value={num(o.qty_today, 0)} />
-        <Fig label="Margin" value={lakh(o.margin_today)}
-          sub={o.margin_pct_today != null ? num(o.margin_pct_today, 1) + '%' : null} />
-        <Fig label="Shops trading" value={o.shops_trading || 0} />
+        <Fig label="Sales today" value={lakh(o?.sales_today ?? shops.reduce((t, r) => t + Number(r.sales_today || 0), 0))} feature />
+        <Fig label="Bills" value={Number(o?.bills_today ?? shops.reduce((t, r) => t + Number(r.bills_today || 0), 0)).toLocaleString('en-IN')} />
+        <Fig label="Basket" value={o?.basket_today ? inr(o.basket_today) : "—"} />
+        <Fig label="Pieces sold" value={o?.qty_today != null ? num(o.qty_today, 0) : "—"} />
+        <Fig label="Margin" value={o?.margin_today != null ? lakh(o.margin_today) : "—"}
+          sub={o?.margin_pct_today != null ? num(o.margin_pct_today, 1) + '%' : null} />
+        <Fig label="Shops trading" value={o?.shops_trading ?? shops.filter(r => r.has_sales).length} />
       </div>
 
       {/* month and stock */}
       <div className="card grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-6">
-        <Fig label="Sales this month" value={lakh(o.sales_month)} />
-        <Fig label="Bills this month" value={Number(o.bills_month || 0).toLocaleString('en-IN')} />
-        <Fig label="Margin this month" value={lakh(o.margin_month)}
-          sub={o.margin_pct_month != null ? num(o.margin_pct_month, 1) + '%' : null} />
-        <Fig label="Stock value" value={lakh(stock?.stock_value ?? o.stock_value)} />
+        <Fig label="Sales this month" value={lakh(o?.sales_month ?? shops.reduce((t, r) => t + Number(r.sales_month || 0), 0))} />
+        <Fig label="Bills this month" value={Number(o?.bills_month ?? shops.reduce((t, r) => t + Number(r.bills_month || 0), 0)).toLocaleString('en-IN')} />
+        <Fig label="Margin this month" value={o?.margin_month != null ? lakh(o.margin_month) : "—"}
+          sub={o?.margin_pct_month != null ? num(o.margin_pct_month, 1) + '%' : null} />
+        <Fig label="Stock value"
+          value={lakh(
+            stock?.stock_value
+            ?? (shops.reduce((t, r) => t + Number(r.stock_value || 0), 0)
+                || o?.stock_value
+                || 0))} />
         <Fig label="Held over 180 days"
           value={stock ? lakh(stock.value_over_180) : '—'}
           sub={stock?.pct_over_180 != null ? num(stock.pct_over_180, 0) + '% of stock' : null}
           tone={stock?.pct_over_180 > 50 ? 'bad' : null} />
         <Fig label="Stock cover"
-          value={o.stock_cover_days ? Math.round(o.stock_cover_days) + ' days' : '—'}
-          tone={o.stock_cover_days > 180 ? 'bad' : null} />
+          value={o?.stock_cover_days ? Math.round(o.stock_cover_days) + ' days' : '—'}
+          tone={o?.stock_cover_days > 180 ? 'bad' : null} />
       </div>
 
       {/* CC against Non CC */}
@@ -701,12 +711,12 @@ function CompanyOverview({ can }) {
           <Link to="/orders" className="card p-4 transition hover:border-mute">
             <div className="text-sm font-semibold">Purchase orders</div>
             <div className="mt-2 grid grid-cols-3 gap-2">
-              <Mini label="Waiting approval" value={o.po_pending} warn={o.po_pending > 0} />
-              <Mini label="Open" value={o.po_open} />
-              <Mini label="Part received" value={o.po_partial} />
+              <Mini label="Waiting approval" value={o?.po_pending} warn={o?.po_pending > 0} />
+              <Mini label="Open" value={o?.po_open} />
+              <Mini label="Part received" value={o?.po_partial} />
             </div>
             <div className="mt-2 text-2xs text-slate2">
-              {lakh(o.po_open_value)} committed on open orders
+              {lakh(o?.po_open_value)} committed on open orders
             </div>
           </Link>
         )}
@@ -714,13 +724,13 @@ function CompanyOverview({ can }) {
           <Link to="/tasks" className="card p-4 transition hover:border-mute">
             <div className="text-sm font-semibold">Tasks</div>
             <div className="mt-2 grid grid-cols-3 gap-2">
-              <Mini label="Open" value={o.tasks_open} />
-              <Mini label="Overdue" value={o.tasks_overdue} bad={o.tasks_overdue > 0} />
-              <Mini label="To check" value={o.tasks_to_check} warn={o.tasks_to_check > 0} />
+              <Mini label="Open" value={o?.tasks_open} />
+              <Mini label="Overdue" value={o?.tasks_overdue} bad={o?.tasks_overdue > 0} />
+              <Mini label="To check" value={o?.tasks_to_check} warn={o?.tasks_to_check > 0} />
             </div>
-            {o.tasks_disputed > 0 && (
+            {o?.tasks_disputed > 0 && (
               <div className="mt-2 text-2xs text-bad">
-                {o.tasks_disputed} disputed, waiting on MD Office
+                {o?.tasks_disputed} disputed, waiting on MD Office
               </div>
             )}
           </Link>
