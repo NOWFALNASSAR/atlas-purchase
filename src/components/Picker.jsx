@@ -24,7 +24,20 @@ export default function Picker({ label, options, value, onChange, placeholder = 
   const shown = onSearch
     ? options.slice(0, 60)
     : q
-      ? options.filter(o => (o.label + ' ' + (o.sub || '')).toLowerCase().includes(q.toLowerCase())).slice(0, 60)
+      /* Punctuation is ignored on both sides. PONN`S APPARELS is
+         stored with a backtick, so typing PONNS matched nothing and
+         the supplier looked missing when it was simply unfindable.
+         Same for HATIN`S, M/S. ATLAS and A.R.M.ENTERPRISES. */
+      ? (() => {
+          const plain = t => t.toLowerCase().replace(/[^a-z0-9]/g, '')
+          const typed = q.toLowerCase()
+          const typedPlain = plain(q)
+          return options.filter(o => {
+            const hay = (o.label + ' ' + (o.sub || '')).toLowerCase()
+            return hay.includes(typed) ||
+                   (typedPlain && plain(hay).includes(typedPlain))
+          }).slice(0, 60)
+        })()
       : options.slice(0, 60)
 
   return (
