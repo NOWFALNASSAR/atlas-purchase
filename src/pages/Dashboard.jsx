@@ -27,7 +27,7 @@ export default function Dashboard() {
 
   const show = {
     purchase: can('po.view'),
-    stock:    can('inventory.view') || can('godown.view') || can('transfers.view'),
+    stock:    can('stock.reports') || can('godown.view') || can('transfers.view'),
     sales:    can('sales.view'),
     tasks:    can('tasks.view'),
     setup:    can('users.manage') || can('roles.manage') || can('settings.manage')
@@ -349,14 +349,14 @@ function StockSection({ can }) {
   }, [])
 
   return (
-    <Section title="Stock" to="/inventory" toLabel="Open inventory" loading={state.loading}>
+    <Section title="Stock" to="/stock/reports" toLabel="Stock reports" loading={state.loading}>
       {() => state.error ? <Broken what="stock" /> : (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <Stat label="Stock value" value={lakh(state.value)}
               sub={Math.round(state.qty || 0).toLocaleString('en-IN') + ' pieces'} feature />
             <Stat label="Held over 180 days" value={lakh(state.deadValue)}
-              sub={(state.deadCount || 0) + ' lines'} to="/inventory"
+              sub={(state.deadCount || 0) + ' lines'} to="/stock/reports"
               tone={state.deadValue > 0 ? 'warn' : undefined} />
           </div>
 
@@ -833,8 +833,36 @@ function CompanyOverview({ can }) {
                   </td>
                 </tr>
               ))}
+              {/* The total. Without it you are adding nine numbers in
+                  your head to check them against anything else. */}
+              <tr className="border-t-2 border-ink/20 bg-paper font-semibold">
+                <td className="px-4 py-2.5">Total</td>
+                <td className="px-3 py-2.5 text-right">
+                  {lakh(shops.reduce((t, r) => t + Number(r.sales_today || 0), 0))}
+                </td>
+                <td className="px-3 py-2.5 text-right">
+                  {shops.reduce((t, r) => t + Number(r.bills_today || 0), 0)}
+                </td>
+                <td className="px-3 py-2.5 text-right">
+                  {(() => {
+                    const v = shops.reduce((t, r) => t + Number(r.sales_today || 0), 0)
+                    const b = shops.reduce((t, r) => t + Number(r.bills_today || 0), 0)
+                    return b > 0 ? inr(v / b) : '—'
+                  })()}
+                </td>
+                <td className="px-3 py-2.5 text-right">
+                  {lakh(shops.reduce((t, r) => t + Number(r.sales_month || 0), 0))}
+                </td>
+                <td className="px-4 py-2.5 text-right">
+                  {lakh(shops.reduce((t, r) => t + Number(r.stock_value || 0), 0))}
+                </td>
+              </tr>
             </tbody>
           </table>
+          <p className="border-t border-line px-4 py-2 text-2xs text-slate2">
+            {shops.filter(r => r.has_stock).length} of {shops.length} shops have stock
+            loaded, {shops.filter(r => r.has_sales).length} have sales.
+          </p>
         </div>
       )}
 

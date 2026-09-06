@@ -23,7 +23,6 @@ import Settings  from './pages/Settings'
 import Insights  from './pages/Insights'
 import Godown    from './pages/Godown'
 import Transfers from './pages/Transfers'
-import Inventory from './pages/Inventory'
 import StockReports from './pages/StockReports'
 import StockUpload  from './pages/StockUpload'
 import SalesReports   from './pages/SalesReports'
@@ -106,7 +105,6 @@ const MODULES = [
   {
     key: 'stock', label: 'Stock', short: 'Stock',
     pages: [
-      { to: '/inventory',  label: 'Inventory', short: 'Stock',     perm: 'inventory.view' },
       { to: '/stock/reports', label: 'Stock reports', short: 'Reports', perm: 'stock.reports' },
       { to: '/stock/upload',  label: 'Upload stock',  short: 'Upload',  perm: 'stock.import' },
       { to: '/godown',     label: 'Godown',    short: 'Godown',    perm: 'godown.view' },
@@ -242,8 +240,6 @@ export default function App() {
           <Route path="/orders/receiving" element={<Need p="po.receive"><PoReceiving /></Need>} />
           <Route path="/purchase/targets" element={<Need p="purchase.targets"><PurchaseTargets /></Need>} />
           <Route path="/insights"         element={<Need p="insights.view"><Insights /></Need>} />
-
-          <Route path="/inventory"        element={<Need p="inventory.view"><Inventory /></Need>} />
           <Route path="/stock/reports"    element={<Need p="stock.reports"><StockReports /></Need>} />
           <Route path="/stock/upload"     element={<Need p="stock.import"><StockUpload /></Need>} />
           <Route path="/godown"           element={<Need p="godown.view"><Godown /></Need>} />
