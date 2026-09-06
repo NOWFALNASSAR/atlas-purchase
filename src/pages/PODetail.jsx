@@ -20,6 +20,12 @@ export default function PODetail() {
   const [shops, setShops] = useState([])
   const [history, setHistory] = useState([])
   const [company, setCompany] = useState({})
+  /* What this supplier has supplied before, with the last rate and
+     date on each. Loaded in the main fetch below and filtered to this
+     order's supplier. If v_supplier_items does not exist the list is
+     empty and ItemEditor falls back to every item — which is what was
+     happening, and why the picker showed all 11,000. */
+  const [supplierItems, setSupplierItems] = useState([])
   const [busy, setBusy] = useState(false)
 
   useEffect(() => { loadAll() }, [id])
@@ -31,17 +37,26 @@ export default function PODetail() {
     setPo(p)
     if (!p) return
 
-    const [{ data: li }, { data: al }, { data: it }, { data: sh }, { data: hi }, { data: st }] =
+    const [{ data: li }, { data: al }, { data: it }, { data: sup },
+           { data: sh }, { data: hi }, { data: st }] =
       await Promise.all([
         db.from('po_items').select('*').eq('po_id', id).order('sort_order'),
         db.from('po_item_allocations').select('*, shops(code,name)').eq('po_id', id),
         db.from('items').select('*').eq('active', true).order('name'),
+        /* What this supplier has actually supplied, with the rate and
+           the date. Ordering from a list of 11,000 items when a
+           supplier sells you forty of them is how the wrong item gets
+           picked. */
+        db.from('v_supplier_items').select('*').order('last_date', { ascending: false }),
         db.from('shops').select('*').eq('active', true).eq('entity_id', p.entity_id).order('code'),
         db.from('po_history').select('*').eq('po_id', id).order('created_at', { ascending: false }),
         db.from('settings').select('value').eq('key', 'company').single()
       ])
     setLines(li || []); setAllocs(al || []); setItems(it || [])
     setShops(sh || []); setHistory(hi || []); setCompany(st?.value || {})
+
+    // only what this supplier has supplied
+    setSupplierItems((sup || []).filter(r => r.supplier_id === p.supplier_id))
   }
 
   if (!po) return <div className="py-16 text-center text-sm text-slate2">Loading order</div>
@@ -120,6 +135,7 @@ export default function PODetail() {
 
   const addLine = () => setLines(l => [...l, { po_id: po.id, purchase_rate: '', selling_rate: '' }])
 
+
   return (
     <div className="page page-lg space-y-5">
       <div className="card overflow-hidden">
@@ -196,7 +212,7 @@ export default function PODetail() {
         )}
 
         {lines.map((l, i) => (
-          <ItemEditor key={l.id || 'new-' + i}
+          <ItemEditor key={l.id || 'new-' + i} supplierItems={supplierItems}
             line={l} index={i} items={items} shops={shops} editable={editable} po={po}
             onSaved={row => { setLines(ls => ls.map((x, j) => (j === i ? row : x))); refresh() }}
             onDeleted={() => { setLines(ls => ls.filter((_, j) => j !== i)); refresh() }} />
