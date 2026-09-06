@@ -360,15 +360,20 @@ function SalesSection({ entityId, can }) {
   useEffect(() => {
     let live = true
     Promise.all([
-      db.from('v_sales_today').select('*'),
-      can('sales.targets.view')
-        ? db.from('v_target_progress').select('*')
+      /* The billing exports, not sales_daily. The old views were built
+         on the branch-summary upload that nothing fills any more, so
+         this panel showed zero while the Sales screens showed real
+         figures. */
+      db.from('v_sales_today_now').select('*'),
+      can('sales.reports')
+        ? db.from('v_sales_target_now').select('*')
         : Promise.resolve({ data: [] })
     ]).then(([today, target]) => {
       if (!live) return
       if (today.error) return setState({ loading: false, error: true })
 
-      const keep = r => entityId === 'mixed' || !entityId || r.entity_id === entityId
+      // these are keyed by branch, not entity
+      const keep = () => true
       const t = (today.data || []).filter(keep)
       const g = (target.data || []).filter(keep)
 
@@ -396,7 +401,7 @@ function SalesSection({ entityId, can }) {
     : null
 
   return (
-    <Section title="Sales" to="/sales" toLabel="Sales dashboard" loading={state.loading}>
+    <Section title="Sales" to="/sales/reports" toLabel="Daily reports" loading={state.loading}>
       {() => state.error ? <Broken what="sales" /> : (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -406,7 +411,7 @@ function SalesSection({ entityId, can }) {
               feature />
             <Stat label="Month to date" value={lakh(state.mtd)}
               sub={state.pct == null ? 'no target set' : num(state.pct) + '% of target'}
-              to="/sales/targets" />
+              to="/sales/reports" />
           </div>
 
           {state.pct != null && (

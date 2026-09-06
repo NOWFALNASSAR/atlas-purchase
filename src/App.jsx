@@ -26,13 +26,8 @@ import Transfers from './pages/Transfers'
 import Inventory from './pages/Inventory'
 import StockReports from './pages/StockReports'
 import StockUpload  from './pages/StockUpload'
-import SalesDashboard from './pages/SalesDashboard'
 import SalesReports   from './pages/SalesReports'
 import SalesUpload    from './pages/SalesUpload'
-import SalesBranches  from './pages/SalesBranches'
-import Salesmen       from './pages/Salesmen'
-import Targets        from './pages/Targets'
-import SalesImport    from './pages/SalesImport'
 import Tasks          from './pages/Tasks'
 import TaskHome       from './pages/TaskHome'
 import NewTask        from './pages/NewTask'
@@ -122,13 +117,8 @@ const MODULES = [
     key: 'sales', label: 'Sales', short: 'Sales',
     pages: [
       { to: '/mis',             label: 'MIS',             short: 'MIS',      perm: 'sales.reports' },
-      { to: '/sales',           label: 'Sales dashboard', short: 'Sales',    perm: 'sales.view' },
       { to: '/sales/reports',   label: 'Daily reports',   short: 'Daily',    perm: 'sales.reports' },
       { to: '/sales/upload',    label: 'Upload BILLWISE + ITEMWISE', short: 'Upload', perm: 'sales.import' },
-      { to: '/sales/branches',  label: 'Branches',        short: 'Branches', perm: 'sales.branches' },
-      { to: '/sales/salesmen',  label: 'Salesmen',        short: 'Team',     perm: 'sales.salesmen' },
-      { to: '/sales/targets',   label: 'Targets',         short: 'Targets',  perm: 'sales.targets.view' },
-      { to: '/sales/import',    label: 'Upload branch summary (old)', short: 'Old',  perm: 'sales.import' }
     ]
   },
   {
@@ -258,14 +248,11 @@ export default function App() {
           <Route path="/stock/upload"     element={<Need p="stock.import"><StockUpload /></Need>} />
           <Route path="/godown"           element={<Need p="godown.view"><Godown /></Need>} />
           <Route path="/transfers"        element={<Need p="transfers.view"><Transfers /></Need>} />
-
-          <Route path="/sales"            element={<Need p="sales.view"><SalesDashboard /></Need>} />
+          {/* Sales opens on the daily reports now. The old dashboard read
+              sales_daily, which the billing exports replaced. */}
+          <Route path="/sales"            element={<Need p="sales.reports"><SalesReports /></Need>} />
           <Route path="/sales/reports"    element={<Need p="sales.reports"><SalesReports /></Need>} />
           <Route path="/sales/upload"     element={<Need p="sales.import"><SalesUpload /></Need>} />
-          <Route path="/sales/branches"   element={<Need p="sales.branches"><SalesBranches /></Need>} />
-          <Route path="/sales/salesmen"   element={<Need p="sales.salesmen"><Salesmen /></Need>} />
-          <Route path="/sales/targets"    element={<Need p="sales.targets.view"><Targets /></Need>} />
-          <Route path="/sales/import"     element={<Need p="sales.import"><SalesImport /></Need>} />
 
           <Route path="/tasks"            element={<Need p="tasks.view"><TaskHome /></Need>} />
           <Route path="/tasks/list"       element={<Need p="tasks.view"><Tasks /></Need>} />
