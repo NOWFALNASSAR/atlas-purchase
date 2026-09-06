@@ -795,7 +795,15 @@ function CompanyOverview({ can }) {
                   <td className="px-3 py-2.5 text-right text-slate2">{sh.bills_today || 0}</td>
                   <td className="px-3 py-2.5 text-right text-slate2">{inr(sh.basket_today)}</td>
                   <td className="px-3 py-2.5 text-right font-semibold">{lakh(sh.sales_month)}</td>
-                  <td className="px-4 py-2.5 text-right">{lakh(sh.stock_value)}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    {lakh(sh.stock_value)}
+                    {sh.has_stock === false && (
+                      <span className="block text-2xs text-gold">no stock file</span>
+                    )}
+                    {sh.has_sales === false && sh.has_stock && (
+                      <span className="block text-2xs text-gold">no sales uploaded</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
