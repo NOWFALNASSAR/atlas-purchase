@@ -244,6 +244,14 @@ export default function BulkUpload() {
       setResults([...out])
     }
 
+    /* Stored results, refreshed once at the end rather than after
+       every shop — ten refreshes of the same thing would treble the
+       time for no benefit. */
+    if (out.some(r => r.ok)) {
+      setProgress('Updating the item and supplier lists…')
+      await db.rpc('refresh_item_views')
+    }
+
     setProgress(null)
     setRunning(false)
     setResults(out)

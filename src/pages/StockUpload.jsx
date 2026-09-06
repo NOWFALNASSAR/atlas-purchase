@@ -291,6 +291,13 @@ const GODOWN = 'godown'
                     `  (${Math.round(n / p.withStock.length * 100)}%)${eta(n, p.withStock.length)}`)
       }
 
+      setProgress('Updating the item and supplier lists…')
+      /* The item master and the supplier's own items are stored
+         results now, not live queries — they were too slow to compute
+         on every screen open. So they have to be refreshed here, which
+         is the one moment they can change. */
+      await db.rpc('refresh_item_views')
+
       setProgress('Classifying sales with what this file taught us…')
       const { data: relink } = await db.rpc('relink_sales', { p_from: null })
 
