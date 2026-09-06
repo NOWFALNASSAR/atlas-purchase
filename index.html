@@ -32,11 +32,31 @@
       instead of two.
     -->
     <script>
+      /* Registering the worker here rather than only in main.jsx, so
+         installability depends on one file instead of two.
+
+         The reload below matters more than it looks. A device that
+         already has the old worker keeps serving the old bundle even
+         after a deploy — a fix can be live and invisible. When a new
+         worker takes over, reload once so the page it is serving is
+         the page that was just deployed. */
       if ('serviceWorker' in navigator && location.protocol === 'https:') {
+        var reloading = false
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (reloading) return
+          reloading = true
+          location.reload()
+        })
         window.addEventListener('load', function () {
-          navigator.serviceWorker.register('/sw.js').catch(function (e) {
-            console.warn('Service worker did not register:', e)
-          })
+          navigator.serviceWorker.register('/sw.js')
+            .then(function (reg) {
+              reg.update()
+              // check again when the app is brought back to the front
+              document.addEventListener('visibilitychange', function () {
+                if (!document.hidden) reg.update()
+              })
+            })
+            .catch(function (e) { console.warn('Service worker did not register:', e) })
         })
       }
     </script>
