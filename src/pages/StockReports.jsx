@@ -16,6 +16,7 @@ import { db, lakh, inr, dt, num } from '../lib/db'
 
 const TABS = [
   ['overview',  'Overview'],
+  ['group',     'CC / Non CC'],
   ['shop',      'By shop'],
   ['ageing',    'Ageing'],
   ['division',  'Divisions'],
@@ -46,18 +47,29 @@ export default function StockReports() {
       // every stock view carries snapshot_shop, so one filter does them all
       const only = qb => (shop === 'all' ? qb : qb.eq('snapshot_shop', shop))
 
-      const [snap, ageing, divi, ptype, sup, dead, slow, spread, anom, items, sups, byShop] =
-        await Promise.all([
+      const [snap, ageing, divi, ptype, sup, dead, slow, spread, anom, items, sups,
+             byShop, byGroup] = await Promise.all([
           db.from('stock_snapshots').select('*').order('taken_on', { ascending: false }).limit(1),
           shop === 'all'
             ? db.from('v_stock_ageing_all').select('*').order('sort_order')
             : db.from('v_stock_ageing').select('*').eq('snapshot_shop', shop).order('sort_order'),
-          only(db.from('v_stock_by_division_now').select('*'))
-            .order('value', { ascending: false }),
-          only(db.from('v_stock_by_purchase_type').select('*'))
-            .order('value', { ascending: false }),
-          only(db.from('v_stock_by_supplier_now').select('*'))
-            .order('value', { ascending: false }).limit(200),
+          /* Rolled up when no shop is picked, broken down when one is.
+             The shop-wise views return one row per shop per division,
+             so using them for "all shops" repeats every division once
+             per shop instead of adding them together. */
+          shop === 'all'
+            ? db.from('v_stock_division_all').select('*').order('value', { ascending: false })
+            : db.from('v_stock_by_division_now').select('*')
+                .eq('snapshot_shop', shop).order('value', { ascending: false }),
+          shop === 'all'
+            ? db.from('v_stock_purchase_type_all').select('*').order('value', { ascending: false })
+            : db.from('v_stock_by_purchase_type').select('*')
+                .eq('snapshot_shop', shop).order('value', { ascending: false }),
+          shop === 'all'
+            ? db.from('v_stock_supplier_all').select('*')
+                .order('value', { ascending: false }).limit(200)
+            : db.from('v_stock_by_supplier_now').select('*')
+                .eq('snapshot_shop', shop).order('value', { ascending: false }).limit(200),
           only(db.from('v_dead_barcodes').select('*'))
             .order('value_at_cost', { ascending: false }).limit(500),
           only(db.from('v_slow_movers').select('*'))
@@ -67,7 +79,11 @@ export default function StockReports() {
           // the unified master, the same rows purchase orders use
           db.from('items').select('*').eq('active', true).order('name').limit(500),
           db.from('suppliers').select('*').eq('active', true).order('name').limit(500),
-          db.from('v_stock_by_shop').select('*').order('value', { ascending: false })
+          db.from('v_stock_by_shop').select('*').order('value', { ascending: false }),
+          shop === 'all'
+            ? db.from('v_stock_group_all').select('*').order('value', { ascending: false })
+            : db.from('v_stock_group_by_shop').select('*')
+                .eq('shop_key', shop).order('value', { ascending: false })
         ])
 
       if (snap.error) throw snap.error
@@ -78,7 +94,7 @@ export default function StockReports() {
         supplier: sup.data || [], dead: dead.data || [], slow: slow.data || [],
         spread: spread.data || [], anomaly: anom.data || [],
         items: items.data || [], suppliers: sups.data || [],
-        byShop: byShop.data || []
+        byShop: byShop.data || [], byGroup: byGroup.data || []
       })
       // {label to show, key to filter on} — they are not the same
       setShops((byShop.data || [])
@@ -105,7 +121,8 @@ export default function StockReports() {
     const wb = XLSX.utils.book_new()
     const add = (name, rows) => rows?.length &&
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), name.slice(0, 31))
-    add('By shop', data.byShop); add('Ageing', data.ageing); add('Divisions', data.division)
+    add('CC Non CC', data.byGroup); add('By shop', data.byShop)
+    add('Ageing', data.ageing); add('Divisions', data.division)
     add('Purchase types', data.ptype); add('Suppliers', data.supplier)
     add('Dead stock', data.dead); add('Slow movers', data.slow)
     add('Price spread', data.spread); add('Check these', data.anomaly)
@@ -184,6 +201,25 @@ export default function StockReports() {
           </div>
 
           {tab === 'overview' && <Overview data={data} totals={totals} />}
+
+          {tab === 'group' && (
+            <>
+              <p className="text-xs text-slate2">
+                The two groups everything rolls up into. Every purchase type sits under
+                one of them, set on Masters, not worked out here.
+              </p>
+              <Table head={['Group', 'Barcodes', 'Pieces', 'Value', 'Share', 'Sell-through']}
+                align="lrrrrr"
+                rows={(data.byGroup || []).map(r => [
+                  r.purchase_group,
+                  Number(r.barcodes).toLocaleString('en-IN'),
+                  Math.round(r.pieces).toLocaleString('en-IN'),
+                  lakh(r.value),
+                  r.share_pct == null ? '—' : num(r.share_pct, 1) + '%',
+                  num(r.avg_sell_through, 1) + '%'
+                ])} />
+            </>
+          )}
 
           {tab === 'shop' && (
             <Table head={['Shop', 'Barcodes', 'Pieces', 'Value', 'Sell-through']}
