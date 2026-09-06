@@ -239,6 +239,13 @@ export default function SalesUpload() {
       // fill in division and supplier from the godown master
       await db.rpc('relink_sales', { p_from: p.date })
 
+      /* And refresh the stored views. Without this the day is in
+         sales_bills but not in v_sales_by_group, so the dashboard —
+         which reads the table — shows more than MIS, which reads the
+         stored view. Two screens, two totals, no error anywhere. */
+      setBusy(true)
+      await db.rpc('refresh_item_views')
+
       setDone(p)
       setLocked(true)
       loadStatus()

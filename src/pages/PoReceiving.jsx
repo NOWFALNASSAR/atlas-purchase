@@ -64,6 +64,8 @@ export default function PoReceiving() {
     })
     setBusy(null)
     if (error) return setNotice(error.message)
+    // the supplier's rate history is stored; a receipt changes it
+    db.rpc('refresh_item_views')
     setNotice(`${r.ordered_item} marked received.`)
     loadLines(open.po_id)
     load()
