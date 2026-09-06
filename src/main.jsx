@@ -10,7 +10,9 @@ import './index.css'
    get in the way of seeing your own changes. */
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(err =>
+    // registered in index.html, which also reloads once when a new
+    // build takes over. Registering twice risks two workers racing.
+    void 0 || navigator.serviceWorker.register('/sw.js').catch(err =>
       console.warn('Service worker did not register:', err))
   })
 }

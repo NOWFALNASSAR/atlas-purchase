@@ -34,8 +34,6 @@ export default function Dashboard() {
   }
 
   const small = [
-    show.stock && <StockSection key="stock" can={can} />,
-    show.sales && <SalesSection key="sales" can={can} entityId={entityId} />,
     show.tasks && <TasksSection key="tasks" />
   ].filter(Boolean)
 
@@ -314,185 +312,6 @@ function PurchaseSection({ me, entityId, can }) {
 }
 
 /* ==================================================================
-   3. STOCK
-   ================================================================== */
-
-function StockSection({ can }) {
-  const [state, setState] = useState({
-    loading: true, qty: 0, value: 0, deadValue: 0, deadCount: 0, transit: 0, top: []
-  })
-
-  useEffect(() => {
-    let live = true
-    Promise.all([
-      db.from('v_stock_by_division').select('*'),
-      db.from('v_dead_stock').select('cost_value').limit(2000),
-      can('transfers.view')
-        ? db.from('v_in_transit').select('doc_no').limit(500)
-        : Promise.resolve({ data: [] })
-    ]).then(([div, dead, transit]) => {
-      if (!live) return
-      if (div.error) return setState({ loading: false, error: true })
-
-      const rows = div.data || []
-      setState({
-        loading: false,
-        qty:   rows.reduce((s, r) => s + Number(r.qty || 0), 0),
-        value: rows.reduce((s, r) => s + Number(r.cost_value || 0), 0),
-        deadValue: (dead.data || []).reduce((s, r) => s + Number(r.cost_value || 0), 0),
-        deadCount: (dead.data || []).length,
-        transit: (transit.data || []).length,
-        top: rows.sort((a, b) => Number(b.cost_value) - Number(a.cost_value)).slice(0, 4)
-      })
-    })
-    return () => { live = false }
-  }, [])
-
-  return (
-    <Section title="Stock" to="/stock/reports" toLabel="Stock reports" loading={state.loading}>
-      {() => state.error ? <Broken what="stock" /> : (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <Stat label="Stock value" value={lakh(state.value)}
-              sub={Math.round(state.qty || 0).toLocaleString('en-IN') + ' pieces'} feature />
-            <Stat label="Held over 180 days" value={lakh(state.deadValue)}
-              sub={(state.deadCount || 0) + ' lines'} to="/stock/reports"
-              tone={state.deadValue > 0 ? 'warn' : undefined} />
-          </div>
-
-          {can('transfers.view') && state.transit > 0 && (
-            <Link to="/transfers"
-              className="flex items-center justify-between rounded-lg border border-bad/30 bg-bad/[.04] px-4 py-3 transition hover:bg-bad/[.07]">
-              <span className="text-sm font-semibold text-bad">
-                {state.transit} transfer{state.transit > 1 ? 's' : ''} sent but not received
-              </span>
-              <span className="text-sm font-semibold text-bad">Check</span>
-            </Link>
-          )}
-
-          {state.top?.length > 0 && (
-            <ul className="card divide-y divide-line">
-              {state.top.map(r => (
-                <li key={r.label} className="flex items-center gap-3 px-4 py-2.5">
-                  <span className="min-w-0 flex-1 truncate text-sm">{r.label}</span>
-                  <span className="text-xs text-slate2">
-                    {Math.round(Number(r.qty || 0)).toLocaleString('en-IN')} pcs
-                  </span>
-                  <span className="w-20 text-right text-sm font-semibold">{lakh(r.cost_value)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </Section>
-  )
-}
-
-/* ==================================================================
-   4. SALES
-   ================================================================== */
-
-function SalesSection({ entityId, can }) {
-  const [state, setState] = useState({
-    loading: true, today: 0, yesterday: 0, bills: 0,
-    mtd: 0, target: 0, pct: null, behind: []
-  })
-
-  useEffect(() => {
-    let live = true
-    Promise.all([
-      /* The billing exports, not sales_daily. The old views were built
-         on the branch-summary upload that nothing fills any more, so
-         this panel showed zero while the Sales screens showed real
-         figures. */
-      db.from('v_sales_today_now').select('*'),
-      can('sales.reports')
-        ? db.from('v_sales_target_now').select('*')
-        : Promise.resolve({ data: [] })
-    ]).then(([today, target]) => {
-      if (!live) return
-      if (today.error) return setState({ loading: false, error: true })
-
-      // these are keyed by branch, not entity
-      const keep = () => true
-      const t = (today.data || []).filter(keep)
-      const g = (target.data || []).filter(keep)
-
-      const sum = (rows, k) => rows.reduce((s, r) => s + Number(r[k] || 0), 0)
-      const targetTotal = sum(g, 'target')
-
-      setState({
-        loading: false,
-        today:      sum(t, 'net_sales'),
-        yesterday:  sum(t, 'yesterday_sales'),
-        bills:      sum(t, 'bills'),
-        mtd:        sum(g, 'achieved'),
-        target:     targetTotal,
-        pct:        targetTotal ? (sum(g, 'achieved') / targetTotal) * 100 : null,
-        behind: g.filter(r => ['critical', 'attention'].includes(r.status))
-                 .sort((a, b) => (a.achievement_pct || 0) - (b.achievement_pct || 0))
-                 .slice(0, 4)
-      })
-    })
-    return () => { live = false }
-  }, [entityId])
-
-  const change = state.yesterday > 0
-    ? ((state.today - state.yesterday) / state.yesterday) * 100
-    : null
-
-  return (
-    <Section title="Sales" to="/sales/reports" toLabel="Daily reports" loading={state.loading}>
-      {() => state.error ? <Broken what="sales" /> : (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <Stat label="Sold today" value={lakh(state.today)}
-              sub={change == null ? (state.bills || 0) + ' bills'
-                : `${change >= 0 ? '+' : ''}${num(change)}% on yesterday`}
-              feature />
-            <Stat label="Month to date" value={lakh(state.mtd)}
-              sub={state.pct == null ? 'no target set' : num(state.pct) + '% of target'}
-              to="/sales/reports" />
-          </div>
-
-          {state.pct != null && (
-            <div className="card p-4">
-              <div className="mb-1.5 flex justify-between text-sm">
-                <span className="text-slate2">Against a target of {lakh(state.target)}</span>
-                <span className="font-semibold">{num(state.pct)}%</span>
-              </div>
-              <div className="h-2 rounded-full bg-line2">
-                <div className={'h-2 rounded-full ' +
-                    (state.pct >= 85 ? 'bg-good' : state.pct >= 70 ? 'bg-warn' : 'bg-bad')}
-                  style={{ width: Math.min(state.pct, 100) + '%' }} />
-              </div>
-            </div>
-          )}
-
-          {state.behind?.length > 0 && (
-            <div>
-              <h3 className="mb-2 text-sm font-semibold">Branches behind target</h3>
-              <ul className="card divide-y divide-line">
-                {state.behind.map(b => (
-                  <li key={b.branch_id} className="flex items-center gap-3 px-4 py-2.5">
-                    <span className="min-w-0 flex-1 truncate text-sm">{b.branch_name}</span>
-                    <span className="text-xs text-slate2">{lakh(b.achieved)}</span>
-                    <span className={'tag ' + (b.status === 'critical' ? 'bg-bad/10 text-bad' : 'bg-warn/15 text-warn')}>
-                      {b.achievement_pct ?? 0}%
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-    </Section>
-  )
-}
-
-/* ==================================================================
    5. TASKS
    ================================================================== */
 
@@ -680,6 +499,7 @@ const ageDays = iso =>
 function CompanyOverview({ can }) {
   const [err, setErr] = useState(null)
   const [o, setO] = useState(null)
+  const [stock, setStock] = useState(null)
   const [shops, setShops] = useState([])
   const [groups, setGroups] = useState([])
   const [state, setState] = useState('loading')
@@ -689,8 +509,13 @@ function CompanyOverview({ can }) {
     Promise.all([
       db.from('v_company_overview').select('*').maybeSingle(),
       db.from('v_company_by_shop').select('*').order('sales_month', { ascending: false }),
-      db.from('v_company_by_group').select('*')
-    ]).then(([a, b, c]) => {
+      db.from('v_company_by_group').select('*'),
+      /* Stock comes from ONE place. The headline used to read it from
+         v_company_overview while the table below read it from
+         v_company_by_shop — two views computing the same figure, and
+         one showed zero while the other showed crores. */
+      db.from('v_stock_summary').select('*').maybeSingle()
+    ]).then(([a, b, c, d]) => {
       if (!live) return
       if (a.error || b.error || c.error) {
         setErr((a.error || b.error || c.error).message)
@@ -699,6 +524,7 @@ function CompanyOverview({ can }) {
       setO(a.data || null)
       setShops(b.data || [])
       setGroups(c.data || [])
+      setStock(d.data || null)
       setState(a.data ? 'ready' : 'empty')
     })
     return () => { live = false }
@@ -756,8 +582,11 @@ function CompanyOverview({ can }) {
         <Fig label="Bills this month" value={Number(o.bills_month || 0).toLocaleString('en-IN')} />
         <Fig label="Margin this month" value={lakh(o.margin_month)}
           sub={o.margin_pct_month != null ? num(o.margin_pct_month, 1) + '%' : null} />
-        <Fig label="Stock value" value={lakh(o.stock_value)} />
-        <Fig label="Stock pieces" value={num(o.stock_pieces, 0)} />
+        <Fig label="Stock value" value={lakh(stock?.stock_value ?? o.stock_value)} />
+        <Fig label="Held over 180 days"
+          value={stock ? lakh(stock.value_over_180) : '—'}
+          sub={stock?.pct_over_180 != null ? num(stock.pct_over_180, 0) + '% of stock' : null}
+          tone={stock?.pct_over_180 > 50 ? 'bad' : null} />
         <Fig label="Stock cover"
           value={o.stock_cover_days ? Math.round(o.stock_cover_days) + ' days' : '—'}
           tone={o.stock_cover_days > 180 ? 'bad' : null} />
