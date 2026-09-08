@@ -48,6 +48,11 @@ export default function SalesUpload() {
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(null)
   const [note, setNote] = useState('')
+  /* What the shop says it took, entered by whoever uploads. Asked for
+     at the moment the files go in, because that is when someone has
+     the day's figure in front of them — asked for later, it never
+     gets entered. */
+  const [declared, setDeclared] = useState('')
   const [status, setStatus] = useState([])
   const [locked, setLocked] = useState(false)
   const inputs = { bill: useRef(), item: useRef(), man: useRef() }
@@ -246,7 +251,15 @@ export default function SalesUpload() {
       setBusy(true)
       await db.rpc('refresh_item_views')
 
-      setDone(p)
+      if (declared !== '' && Number(declared) > 0) {
+        await db.from('sales_declared').upsert({
+          branch_code: p.branch, sale_date: p.date,
+          total_amount: Number(declared), bills: p.live,
+          note: note.trim() || null
+        }, { onConflict: 'branch_code,sale_date' })
+      }
+
+      setDone({ ...p, declared: declared === '' ? null : Number(declared) })
       setLocked(true)
       loadStatus()
     } catch (e) {
@@ -272,7 +285,8 @@ export default function SalesUpload() {
   }
 
   function reset() {
-    setFiles({}); setParsed(null); setDone(null); setError(null); setLocked(false); setNote('')
+    setFiles({}); setParsed(null); setDone(null); setError(null); setLocked(false)
+    setNote(''); setDeclared('')
     Object.values(inputs).forEach(r => { if (r.current) r.current.value = '' })
   }
 
@@ -306,6 +320,20 @@ export default function SalesUpload() {
             <Cell label="Margin" value={lakh(done.margin)} />
             <Cell label="Barcodes" value={done.items.length} />
           </div>
+          {done.declared != null && (
+            <div className={'border-t border-line px-4 py-3 text-sm ' +
+              (Math.abs(done.declared - done.amount) <= 1 ? 'bg-good/10 text-good'
+                : Math.abs(done.declared - done.amount) <= 1000 ? 'bg-gold2 text-gold'
+                : 'bg-bad/10 text-bad')}>
+              {Math.abs(done.declared - done.amount) <= 1
+                ? <>The shop's figure and the bill file agree at {inr(done.declared)}.</>
+                : <>
+                    The shop counted {inr(done.declared)}, the bill file says
+                    {' '}{inr(done.amount)} — {inr(Math.abs(done.declared - done.amount))} apart.
+                  </>}
+            </div>
+          )}
+
           <div className="flex gap-2 border-t border-line p-4">
             <Link to="/sales/reports" className="btn-dark flex-1 text-center">See the reports</Link>
             <button className="btn-ghost" onClick={reset}>Upload another day</button>
@@ -421,6 +449,16 @@ export default function SalesUpload() {
           )}
 
           <div className="border-t border-line p-4">
+            <label>The day's total, as the shop counts it (optional)</label>
+            <input type="number" inputMode="decimal" value={declared}
+              onChange={e => setDeclared(e.target.value)}
+              placeholder={parsed ? Math.round(parsed.amount) : 'with tax'} />
+            <p className="mb-3 mt-1 text-2xs text-slate2">
+              With tax, the way the counter totals it. The bill file says
+              {' '}{inr(parsed.amount)}. If they differ, the report will show by how
+              much — that is the point of asking.
+            </p>
+
             <button className="btn-dark w-full"
               disabled={busy || locked ||
                         (Math.abs(parsed.variance) > TOLERANCE && !note.trim())}

@@ -16,6 +16,7 @@ import { db, lakh, inr, dt, num } from '../lib/db'
 
 const TABS = [
   ['day',       'The day'],
+  ['checks',    'Checks'],
   ['salesman',  'Salesmen'],
   ['item',      'Items'],
   ['division',  'Divisions'],
@@ -74,14 +75,16 @@ export default function SalesReports() {
         only(db.from('v_sales_returns').select('*').eq('sale_date', date)),
         only(db.from('v_sales_below_cost').select('*').eq('sale_date', date)),
         only(db.from('v_sales_day_full').select('*'))
-          .order('sale_date', { ascending: false }).limit(60)
+          .order('sale_date', { ascending: false }).limit(60),
+        db.from('v_sales_reconcile').select('*')
+          .order('sale_date', { ascending: false }).limit(200)
       ])
       setD(x => ({
         ...x,
         day: day.data || [], people: people.data || [], items: items.data || [],
         divi: divi.data || [], sup: sup.data || [], tax: tax.data || [],
         cust: cust.data || [], ret: ret.data || [], below: below.data || [],
-        trend: trend.data || []
+        trend: trend.data || [], checks: checks.data || []
       }))
       setFailed(null)
     } catch (e) { setFailed(e.message) }
@@ -194,6 +197,39 @@ export default function SalesReports() {
                 ? `The last 60 days at ${branch === 'all' ? 'all branches' : branch}.`
                 : `${dt(date)} · ${branch === 'all' ? 'all branches' : branch}`}
           </p>
+
+          {tab === 'checks' && (
+            <>
+              <p className="text-xs text-slate2">
+                Three figures for each day: what the shop counted, what the bills add
+                to, and what the item lines add to. The first two include tax; the
+                third does not, so it is set against the bills without tax.
+              </p>
+              <Table
+                head={['Day', 'Shop', 'Shop counted', 'Bill file', 'Difference',
+                       'Bills ex-tax', 'Item file', 'Difference']}
+                align="llrrrrrr"
+                rows={(d.checks || []).map(r => [
+                  dt(r.sale_date),
+                  r.shop,
+                  r.declared == null ? '—' : inr(r.declared),
+                  r.from_bills == null ? '—' : inr(r.from_bills),
+                  r.declared_vs_bills == null ? '—'
+                    : (Math.abs(r.declared_vs_bills) <= 1 ? 'agrees'
+                       : (r.declared_vs_bills > 0 ? '+' : '−') + inr(Math.abs(r.declared_vs_bills))),
+                  r.bills_extax == null ? '—' : inr(r.bills_extax),
+                  r.from_items == null ? '—' : inr(r.from_items),
+                  r.bills_vs_items == null ? '—'
+                    : (Math.abs(r.bills_vs_items) <= 1 ? 'agrees'
+                       : (r.bills_vs_items > 0 ? '+' : '−') + inr(Math.abs(r.bills_vs_items)))
+                ])} />
+              <p className="text-2xs text-slate2">
+                A day with nothing under "Shop counted" was uploaded without the
+                figure being entered. It can still be added — upload the day again
+                after clearing it, or ask MD Office to enter it.
+              </p>
+            </>
+          )}
 
           {tab === 'day' && (
             <Table head={['Branch', 'Bills', 'Without tax', 'With tax', 'Tax', 'Basket', 'Margin', 'Margin %']}
