@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { db, lakh, inr, dt, num } from '../lib/db'
+import UploadStatus from '../components/UploadStatus'
 
 /* ==================================================================
    SALES REPORTS
@@ -57,7 +58,7 @@ export default function SalesReports() {
     const only = qb => (br ? qb.eq('branch_code', br) : qb)
 
     try {
-      const [day, people, items, divi, sup, tax, cust, ret, below, trend] = await Promise.all([
+      const [day, people, items, divi, sup, tax, cust, ret, below, trend, checks] = await Promise.all([
         only(db.from('v_sales_day_full').select('*').eq('sale_date', date)),
         only(db.from('v_salesman_performance').select('*').eq('sale_date', date))
           .order('value_extax', { ascending: false }),
@@ -121,6 +122,8 @@ export default function SalesReports() {
 
   if (failed) return (
     <div className="page page-xl py-10">
+      <UploadStatus />
+
       <div className="card border-bad/30 bg-bad/[.04] p-5 text-sm text-bad">
         <div className="font-semibold">Could not load sales</div>
         <div className="mt-0.5">{failed}</div>
