@@ -7,10 +7,12 @@ import { InstallProvider, useInstall, isStandalone } from './components/InstallP
 import Login     from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import MisDashboard from './pages/MisDashboard'
+import MonthReport  from './pages/MonthReport'
 import PurchaseDashboard from './pages/PurchaseDashboard'
 import PurchaseTargets  from './pages/PurchaseTargets'
 import POList    from './pages/POList'
 import PoReceiving from './pages/PoReceiving'
+import PoVariance  from './pages/PoVariance'
 import NewPO     from './pages/NewPO'
 import PODetail  from './pages/PODetail'
 import Suppliers from './pages/Suppliers'
@@ -99,6 +101,7 @@ const MODULES = [
       { to: '/compare',     label: 'Rate compare',    short: 'Rates',    perm: 'compare.view' },
       { to: '/reports',     label: 'Order reports',   short: 'Reports',  perm: 'reports.view' },
       { to: '/orders/receiving', label: 'Goods received', short: 'Received', perm: 'po.receive' },
+      { to: '/orders/variance',  label: 'Ordered vs received', short: 'Variance', perm: 'po.view' },
       { to: '/purchase/targets', label: 'Targets',    short: 'Targets',  perm: 'purchase.targets' },
       { to: '/insights',    label: 'Insights',        short: 'Insights', perm: 'insights.view' }
     ]
@@ -118,6 +121,7 @@ const MODULES = [
     pages: [
       { to: '/mis',             label: 'MIS',             short: 'MIS',      perm: 'sales.reports' },
       { to: '/sales/reports',   label: 'Daily reports',   short: 'Daily',    perm: 'sales.reports' },
+      { to: '/sales/months',    label: 'Month by month',  short: 'Months',   perm: 'sales.reports' },
       { to: '/sales/upload',    label: 'Upload BILLWISE + ITEMWISE', short: 'Upload', perm: 'sales.import' },
       { to: '/upload?only=sales', label: 'Upload a zip of sales', short: 'Zip', perm: 'sales.import' },
     ]
@@ -246,6 +250,7 @@ export default function App() {
           <Route path="/compare"          element={<Need p="compare.view"><Compare /></Need>} />
           <Route path="/reports"          element={<Need p="reports.view"><Reports /></Need>} />
           <Route path="/orders/receiving" element={<Need p="po.receive"><PoReceiving /></Need>} />
+          <Route path="/orders/variance"  element={<Need p="po.view"><PoVariance /></Need>} />
           <Route path="/purchase/targets" element={<Need p="purchase.targets"><PurchaseTargets /></Need>} />
           <Route path="/insights"         element={<Need p="insights.view"><Insights /></Need>} />
           <Route path="/stock/reports"    element={<Need p="stock.reports"><StockReports /></Need>} />
@@ -257,6 +262,7 @@ export default function App() {
               sales_daily, which the billing exports replaced. */}
           <Route path="/sales"            element={<Need p="sales.reports"><SalesReports /></Need>} />
           <Route path="/sales/reports"    element={<Need p="sales.reports"><SalesReports /></Need>} />
+          <Route path="/sales/months"     element={<Need p="sales.reports"><MonthReport /></Need>} />
           <Route path="/sales/upload"     element={<Need p="sales.import"><SalesUpload /></Need>} />
 
           <Route path="/tasks"            element={<Need p="tasks.view"><TaskHome /></Need>} />
@@ -703,7 +709,7 @@ const LEGACY = {
   'stock.reports':   ['admin', 'hod', 'manager'],
   'sales.reports':   ['admin', 'hod', 'manager', 'accounts'],
   'sales.targets':   ['admin', 'hod', 'manager'],
-  'sales.import':    ['admin', 'hod', 'manager', 'accounts'],
+  'dashboard.view':  ['admin', 'hod', 'manager', 'accounts'],
   'stock.import':    ['admin', 'hod', 'manager', 'accounts'],
   'po.receive':      ['admin', 'hod', 'manager'],
   'suppliers.view':  ['hod', 'admin'],
